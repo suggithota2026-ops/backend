@@ -1,0 +1,46 @@
+{
+  "name": "prk-smiles-backend",
+  "version": "1.0.0",
+  "description": "Backend API for PRK Smiles application",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "build": "echo 'No build step required for backend'",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "keywords": [
+    "fastify",
+    "mongodb",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/cors": "^8.4.0",
+    "@fastify/jwt": "^7.2.4",
+    "@fastify/multipart": "^8.0.0",
+    "@fastify/static": "^7.0.4",
+    "@fastify/swagger": "^8.12.0",
+    "@fastify/swagger-ui": "^1.9.3",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.24.3",
+    "fastify-plugin": "^4.5.1",
+    "firebase": "^12.7.0",
+    "firebase-admin": "^12.0.0",
+    "joi": "^17.11.0",
+    "pdfkit": "^0.14.0",
+    "pg": "^8.11.0",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
+    "supertest": "^6.3.3"
+  }
+}
