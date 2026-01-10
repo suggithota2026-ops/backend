@@ -1,0 +1,66 @@
+// Hotel/User model (Sequelize)
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/db');
+const { ROLES } = require('../config/constants');
+
+const User = sequelize.define('User', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  mobileNumber: {
+    type: DataTypes.STRING(15),
+    allowNull: false,
+    unique: true,
+  },
+  otpCode: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+  },
+  otpExpiresAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  isVerified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  role: {
+    type: DataTypes.ENUM(...Object.values(ROLES)),
+    defaultValue: ROLES.HOTEL,
+  },
+  hotelName: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  address: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  gstNumber: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  creditLimit: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0,
+  },
+  isBlocked: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  fcmToken: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  lastLoginAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+}, {
+  tableName: 'users',
+  timestamps: true,
+});
+
+module.exports = User;

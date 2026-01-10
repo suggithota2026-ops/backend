@@ -1,0 +1,6 @@
+node_modules/
+.env
+logs/
+uploads/
+port_check.log
+package-lock.json
