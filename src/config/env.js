@@ -8,6 +8,7 @@ module.exports = {
   PORT: process.env.PORT || 3001,
 
   // PostgreSQL
+  DATABASE_URL: process.env.DATABASE_URL || null,
   DB_HOST: process.env.DB_HOST || 'localhost',
   DB_PORT: parseInt(process.env.DB_PORT || '5432', 10),
   DB_NAME: process.env.DB_NAME || 'prk_smiles',
