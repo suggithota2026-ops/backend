@@ -33,6 +33,16 @@ const registerRoutes = async (fastify) => {
   await fastify.register(adminNotificationRoutes, { prefix: '/api/admin' });
   await fastify.register(adminMgmtRoutes, { prefix: '/api/admin' });
 
+  // Root route
+  fastify.get('/', async (request, reply) => {
+    return {
+      success: true,
+      message: 'PRK Smiles API is running',
+      version: '1.0.0',
+      docs: '/api-docs'
+    };
+  });
+
   // Health check
   fastify.get('/health', async (request, reply) => {
     return { status: 'ok', timestamp: new Date().toISOString() };
