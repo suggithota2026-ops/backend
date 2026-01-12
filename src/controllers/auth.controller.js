@@ -13,22 +13,42 @@ const sendOTP = async (request, reply) => {
     // Find user by mobile using Sequelize
     let user = await User.findOne({ where: { mobileNumber } });
 
-    const otpData = generateOTPWithExpiry();
-
+    // If user doesn't exist, they need to submit enquiry first
     if (!user) {
-      // Create new user
-      user = await User.create({
-        mobileNumber,
-        otpCode: otpData.code,
-        otpExpiresAt: otpData.expiresAt,
-        isVerified: false,
-      });
-    } else {
-      // Update OTP for existing user
-      user.otpCode = otpData.code;
-      user.otpExpiresAt = otpData.expiresAt;
-      await user.save();
+      return sendError(
+        reply,
+        'No account found with this number. Please submit an enquiry through our website first.',
+        404
+      );
     }
+
+    // Check if hotel is blocked
+    if (user.role === 'hotel' && user.isBlocked) {
+      return sendError(
+        reply,
+        'Your account has been blocked. Please contact support for assistance.',
+        403
+      );
+    }
+
+    // Check if user is a hotel (role = 'hotel')
+    // Hotels in the hotels table can always login (if not blocked)
+    // Non-hotel users need to be verified
+    if (user.role !== 'hotel' && !user.isVerified) {
+      return sendError(
+        reply,
+        'Your account is not yet approved. Please wait for admin approval or contact support.',
+        403
+      );
+    }
+
+    // Generate and send OTP for existing users
+    const otpData = generateOTPWithExpiry();
+    
+    // Update OTP for existing user
+    user.otpCode = otpData.code;
+    user.otpExpiresAt = otpData.expiresAt;
+    await user.save();
 
     // Send OTP (in production, integrate with SMS service)
     await sendOTPService(mobileNumber, otpData.code);
@@ -94,15 +114,33 @@ const verifyOTP = async (request, reply) => {
       return sendError(reply, 'User not found', 404);
     }
 
+    // Check if hotel is blocked
+    if (user.role === 'hotel' && user.isBlocked) {
+      return sendError(
+        reply,
+        'Your account has been blocked. Please contact support for assistance.',
+        403
+      );
+    }
+
+    // Check if user account is approved
+    // Hotels (role = 'hotel') can always login (if not blocked), others need verification
+    if (user.role !== 'hotel' && !user.isVerified) {
+      return sendError(
+        reply,
+        'Your account is not yet approved by admin. Please wait for approval.',
+        403
+      );
+    }
+
     const isValid = verifyOTPService(user.otpCode, otp, user.otpExpiresAt);
     if (!isValid) {
       return sendError(reply, 'Invalid or expired OTP', 400);
     }
 
-    // Clear OTP and mark verified
+    // Clear OTP and update last login
     user.otpCode = null;
     user.otpExpiresAt = null;
-    user.isVerified = true;
     user.lastLoginAt = new Date();
     await user.save();
 
