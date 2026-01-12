@@ -129,6 +129,54 @@ const verifyOTP = async (request, reply) => {
   }
 };
 
+// POST /api/auth/resend-otp
+const resendOTP = async (request, reply) => {
+  try {
+    const { mobileNumber } = request.body;
+
+    // Find user by mobile
+    const user = await User.findOne({ where: { mobileNumber } });
+    if (!user) {
+      return sendError(reply, 'User not found. Please register first.', 404);
+    }
+
+    // Generate new OTP
+    const otpData = generateOTPWithExpiry();
+
+    // Update user with new OTP
+    user.otpCode = otpData.code;
+    user.otpExpiresAt = otpData.expiresAt;
+    await user.save();
+
+    // Send OTP
+    await sendOTPService(mobileNumber, otpData.code);
+
+    // Log OTP for development/testing
+    logger.info(`OTP resent to ${mobileNumber}: ${otpData.code} (expires in ${OTP_EXPIRY_MINUTES} minutes)`);
+    console.log(`\n========================================`);
+    console.log(`RESENT OTP for ${mobileNumber}: ${otpData.code}`);
+    console.log(`Expires at: ${otpData.expiresAt.toISOString()}`);
+    console.log(`========================================\n`);
+
+    // Return response with OTP (for development)
+    const response = {
+      success: true,
+      message: 'OTP resent successfully',
+      data: {
+        otp: String(otpData.code),
+        expiresAt: otpData.expiresAt.toISOString(),
+        expiresInMinutes: OTP_EXPIRY_MINUTES,
+      },
+    };
+
+    reply.type('application/json');
+    return reply.status(200).send(response);
+  } catch (error) {
+    logger.error('Error resending OTP:', error);
+    return sendError(reply, 'Failed to resend OTP', 500);
+  }
+};
+
 // POST /api/auth/setup-profile
 const setupProfile = async (request, reply) => {
   try {
@@ -190,6 +238,7 @@ const updateFCMToken = async (request, reply) => {
 module.exports = {
   sendOTP,
   verifyOTP,
+  resendOTP,
   setupProfile,
   updateFCMToken,
 };

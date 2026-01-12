@@ -1,4 +1,4 @@
-const { login, sendOtp, verifyOtp, createAdmin } = require('../../controllers/admin/auth.controller');
+const { login, sendOtp, verifyOtp, resendOtp, createAdmin } = require('../../controllers/admin/auth.controller');
 const { sendValidationError } = require('../../utils/response');
 const Joi = require('joi');
 
@@ -63,6 +63,20 @@ const adminAuthRoutes = async (fastify, options) => {
             },
         },
     }, verifyOtp);
+
+    fastify.post('/auth/resend-otp', {
+        schema: {
+            tags: ['admin'],
+            summary: 'Resend OTP to Admin',
+            body: {
+                type: 'object',
+                required: ['mobileNumber'],
+                properties: {
+                    mobileNumber: { type: 'string' },
+                },
+            },
+        },
+    }, resendOtp);
 
     // Hidden/Protected route for creating admins manually via API if needed (or keep it script only)
     // For now, I'll expose it but maybe it should be protected? 

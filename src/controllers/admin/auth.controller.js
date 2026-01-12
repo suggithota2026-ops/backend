@@ -72,6 +72,32 @@ exports.verifyOtp = async (req, reply) => {
     }
 };
 
+// Admin Resend OTP
+exports.resendOtp = async (req, reply) => {
+    try {
+        const { mobileNumber } = req.body;
+
+        const admin = await Admin.findOne({ where: { mobileNumber } });
+        if (!admin) {
+            return sendError(reply, `Admin not found with mobile number: ${mobileNumber}`, 404);
+        }
+
+        const { code, expiresAt } = otpService.generateOTPWithExpiry();
+
+        await admin.update({
+            otpCode: code,
+            otpExpiresAt: expiresAt
+        });
+
+        // Send OTP via service
+        await otpService.sendOTP(mobileNumber, code);
+
+        return sendSuccess(reply, { code }, 'OTP resent successfully');
+    } catch (error) {
+        return sendError(reply, error.message, 500);
+    }
+};
+
 // Create initial admin (useful for seeding)
 exports.createAdmin = async (req, res) => {
     try {

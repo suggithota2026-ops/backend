@@ -1,5 +1,5 @@
 // OTP login APIs
-const { sendOTP, verifyOTP, setupProfile, updateFCMToken } = require('../../controllers/auth.controller');
+const { sendOTP, verifyOTP, resendOTP, setupProfile, updateFCMToken } = require('../../controllers/auth.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { sendValidationError } = require('../../utils/response');
 const {
@@ -105,6 +105,27 @@ const authRoutes = async (fastify, options) => {
       }
     },
   }, verifyOTP);
+
+  // Resend OTP
+  fastify.post('/resend-otp', {
+    schema: {
+      tags: ['auth'],
+      summary: 'Resend OTP to mobile number',
+      body: {
+        type: 'object',
+        required: ['mobileNumber'],
+        properties: {
+          mobileNumber: { type: 'string', pattern: '^[0-9]{10}$' },
+        },
+      },
+    },
+    preHandler: async (request, reply) => {
+      const { error } = sendOTPSchema.validate(request.body);
+      if (error) {
+        return sendValidationError(reply, error.details);
+      }
+    },
+  }, resendOTP);
 
   // Setup Profile (after first login)
   fastify.post('/setup-profile', {
