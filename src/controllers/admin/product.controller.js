@@ -111,6 +111,29 @@ const getFileUrl = (filePath) => {
   return `/uploads/${filePath.replace(/\\/g, '/')}`;
 };
 
+const transformProductImages = (product, request) => {
+  const p = product.toJSON();
+  
+  // Transform image paths to full URLs
+  if (p.images && Array.isArray(p.images)) {
+    p.images = p.images.map(img => {
+      if (typeof img === 'string' && img) {
+        // If it's already a full URL, return as is
+        if (img.startsWith('http://') || img.startsWith('https://')) {
+          return img;
+        }
+        // The frontend's getImageUrl function expects paths like 'products/filename.jpg'
+        // which it will convert to '/uploads/products/filename.jpg'
+        // So we just need to return the path as stored in DB: 'products/filename.jpg'
+        return img;
+      }
+      return img;
+    });
+  }
+  
+  return p;
+};
+
 const createProduct = async (request, reply) => {
   try {
     const userId = request.user?.id || 1;
@@ -280,7 +303,8 @@ const getProducts = async (request, reply) => {
     }
 
     const productsWithCategory = products.map(product => {
-      const p = product.toJSON();
+      const p = transformProductImages(product, request);
+      
       return {
         ...p,
         category: {
@@ -325,8 +349,26 @@ const getProduct = async (request, reply) => {
       attributes: ['name'],
     });
 
+    const productData = product.toJSON();
+    
+    // Transform image paths to full URLs
+    if (productData.images && Array.isArray(productData.images)) {
+      productData.images = productData.images.map(img => {
+        if (typeof img === 'string' && img) {
+          // If it's already a full URL, return as is
+          if (img.startsWith('http://') || img.startsWith('https://')) {
+            return img;
+          }
+          // Convert relative path to URL path
+          const imagePath = img.startsWith('/uploads/') ? img : `/uploads/${img.replace(/\\/g, '/')}`;
+          return imagePath;
+        }
+        return img;
+      });
+    }
+
     const productWithCategory = {
-      ...product.toJSON(),
+      ...productData,
       category: category ? { name: category.name } : null,
     };
 
@@ -513,32 +555,8 @@ const updateProduct = async (request, reply) => {
       attributes: ['name'],
     });
 
-    // Transform image paths to full URLs
-    const productData = product.toJSON();
-    let baseUrl;
-    if (request.headers?.host) {
-      const protocol = request.protocol || (request.headers?.['x-forwarded-proto'] || 'http');
-      baseUrl = `${protocol}://${request.headers.host}`;
-    } else {
-      const host = request.hostname || 'localhost';
-      const port = request.socket?.localPort || 3000;
-      const protocol = request.protocol || 'http';
-      baseUrl = `${protocol}://${host}:${port}`;
-    }
-
-    // Transform images to full URLs
-    if (productData.images && Array.isArray(productData.images)) {
-      productData.images = productData.images.map(img => {
-        if (typeof img === 'string') {
-          if (img.startsWith('http://') || img.startsWith('https://')) {
-            return img;
-          }
-          const imagePath = img.startsWith('/uploads/') ? img : `/uploads/${img.replace(/\\/g, '/')}`;
-          return `${baseUrl}${imagePath}`;
-        }
-        return img;
-      });
-    }
+    // Transform image paths using shared function
+    const productData = transformProductImages(product, request);
 
     const productWithCategory = {
       ...productData,
@@ -666,7 +684,8 @@ const getProductsBySubcategory = async (request, reply) => {
     }
 
     const productsWithCategory = products.map(product => {
-      const p = product.toJSON();
+      const p = transformProductImages(product, request);
+      
       return {
         ...p,
         category: {
