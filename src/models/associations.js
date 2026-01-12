@@ -5,6 +5,7 @@ const Category = require('./category.model');
 const Invoice = require('./invoice.model');
 const Notification = require('./notification.model');
 const Admin = require('./admin.model');
+const ContactMessage = require('./contact.model');
 
 const defineAssociations = () => {
     // User & Order (Already defined in order.model.js but good to centralize or ensure)
@@ -30,6 +31,9 @@ const defineAssociations = () => {
     // Admin & Product (Created By)
     Admin.hasMany(Product, { foreignKey: 'createdById', as: 'createdProducts' });
     Product.belongsTo(Admin, { foreignKey: 'createdById', as: 'createdBy' });
+
+    // ContactMessage has no associations (standalone table)
+    // Just ensure it's loaded for table creation
 };
 
 module.exports = defineAssociations;
