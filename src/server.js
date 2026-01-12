@@ -13,12 +13,16 @@ const start = async () => {
     // Connect to PostgreSQL and auto-sync models
     await connectDB();
 
+    // Run schema migration (for Render free tier without shell access)
+    const { runSchemaMigration } = require('./utils/schema-migration');
+    await runSchemaMigration();
+
     // Build Fastify app
     const app = await buildApp();
 
     // Start server
     await app.listen({ port: PORT, host: '0.0.0.0' });
-    
+
     logger.info(`Server running on port ${PORT} in ${NODE_ENV} mode`);
     logger.info(`API Documentation available at http://localhost:${PORT}/api-docs`);
   } catch (error) {
