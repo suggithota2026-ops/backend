@@ -12,7 +12,7 @@ const createAdmin = async () => {
 
         const username = process.argv[2] || 'admin';
         const password = process.argv[3] || 'password123';
-        const mobileNumber = process.argv[4] || '9876543210';
+        const mobileNumber = process.argv[4] || '9011757177';
         const name = 'System Admin';
 
         // Check if admin exists

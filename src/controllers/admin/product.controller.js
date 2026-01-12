@@ -247,7 +247,7 @@ const getProducts = async (request, reply) => {
       }
     }
     if (status) where.status = status;
-    if (isActive !== undefined) where.isActive = isActive === 'true';
+    if (isActive !== undefined) where.isActive = isActive === true || isActive === 'true';
     if (search) {
       where[Op.or] = [
         { name: { [Op.iLike]: `%${search}%` } },
@@ -268,18 +268,21 @@ const getProducts = async (request, reply) => {
     ]);
 
     // Get category names for products
-    const categoryIds = [...new Set(products.map(p => p.categoryId))];
-    const categories = await Category.findAll({
-      where: { id: { [Op.in]: categoryIds } },
-      attributes: ['id', 'name'],
-    });
-    const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+    const categoryIds = [...new Set(products.map(p => p.categoryId))].filter(id => id != null);
+    let categoryMap = new Map();
+
+    if (categoryIds.length > 0) {
+      const categories = await Category.findAll({
+        where: { id: { [Op.in]: categoryIds } },
+        attributes: ['id', 'name'],
+      });
+      categoryMap = new Map(categories.map(c => [c.id, c.name]));
+    }
 
     const productsWithCategory = products.map(product => {
       const p = product.toJSON();
       return {
         ...p,
-        name: p.name,
         category: {
           id: p.categoryId,
           name: categoryMap.get(p.categoryId) || null
@@ -651,18 +654,21 @@ const getProductsBySubcategory = async (request, reply) => {
     ]);
 
     // Get category names for products
-    const categoryIds = [...new Set(products.map(p => p.categoryId))];
-    const categories = await Category.findAll({
-      where: { id: { [Op.in]: categoryIds } },
-      attributes: ['id', 'name'],
-    });
-    const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+    const categoryIds = [...new Set(products.map(p => p.categoryId))].filter(id => id != null);
+    let categoryMap = new Map();
+
+    if (categoryIds.length > 0) {
+      const categories = await Category.findAll({
+        where: { id: { [Op.in]: categoryIds } },
+        attributes: ['id', 'name'],
+      });
+      categoryMap = new Map(categories.map(c => [c.id, c.name]));
+    }
 
     const productsWithCategory = products.map(product => {
       const p = product.toJSON();
       return {
         ...p,
-        name: p.name,
         category: {
           id: p.categoryId,
           name: categoryMap.get(p.categoryId) || null

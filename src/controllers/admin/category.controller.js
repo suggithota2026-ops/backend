@@ -71,7 +71,7 @@ const getCategories = async (request, reply) => {
     const { isActive } = request.query;
     const query = {};
     if (isActive !== undefined) {
-      query.isActive = isActive === 'true';
+      query.isActive = isActive === true || isActive === 'true';
     }
 
     const categories = await Category.findAll({
