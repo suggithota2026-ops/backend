@@ -1,5 +1,6 @@
 // Route auto-loader
 const authRoutes = require('./auth/auth.routes');
+const contactRoutes = require('./contact.routes');
 const userProductRoutes = require('./user/products.routes');
 const userOrderRoutes = require('./user/orders.routes');
 const userProfileRoutes = require('./user/profile.routes');
@@ -12,10 +13,14 @@ const adminHotelRoutes = require('./admin/hotels.routes');
 const adminReportRoutes = require('./admin/reports.routes');
 const adminNotificationRoutes = require('./admin/notifications.routes');
 const adminMgmtRoutes = require('./admin/admin_mgmt.routes');
+const adminContactRoutes = require('./admin/contact.routes');
 
 const registerRoutes = async (fastify) => {
   // Auth routes (no prefix)
   await fastify.register(authRoutes, { prefix: '/api/auth' });
+
+  // Contact routes (public)
+  await fastify.register(contactRoutes, { prefix: '/api/contact' });
 
   // User routes
   await fastify.register(userProductRoutes, { prefix: '/api/user' });
@@ -32,6 +37,7 @@ const registerRoutes = async (fastify) => {
   await fastify.register(adminReportRoutes, { prefix: '/api/admin' });
   await fastify.register(adminNotificationRoutes, { prefix: '/api/admin' });
   await fastify.register(adminMgmtRoutes, { prefix: '/api/admin' });
+  await fastify.register(adminContactRoutes, { prefix: '/api/admin' });
 
   // Root route
   fastify.get('/', async (request, reply) => {
