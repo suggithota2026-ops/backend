@@ -4,6 +4,8 @@ const {
   getContactMessage,
   updateContactMessage,
   deleteContactMessage,
+  acceptEnquiry,
+  rejectEnquiry,
 } = require('../../controllers/contact.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/admin.middleware');
@@ -81,6 +83,44 @@ const adminContactRoutes = async (fastify, options) => {
     },
     // preHandler: [authenticate, requireAdmin],
   }, deleteContactMessage);
+
+  // Accept enquiry (create hotel account)
+  fastify.post('/contact-messages/:id/accept', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Accept enquiry and create hotel account',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+    },
+    // preHandler: [authenticate, requireAdmin],
+  }, acceptEnquiry);
+
+  // Reject enquiry
+  fastify.post('/contact-messages/:id/reject', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Reject enquiry',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' },
+        },
+      },
+    },
+    // preHandler: [authenticate, requireAdmin],
+  }, rejectEnquiry);
 };
 
 module.exports = adminContactRoutes;

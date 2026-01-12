@@ -16,6 +16,10 @@ const defineAssociations = () => {
     Order.hasOne(Invoice, { foreignKey: 'orderId', as: 'invoice' });
     Invoice.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
 
+    // User (Hotel) & Invoice
+    User.hasMany(Invoice, { foreignKey: 'hotelId', as: 'invoices' });
+    Invoice.belongsTo(User, { foreignKey: 'hotelId', as: 'hotel' });
+
     // Order & Notification
     Order.hasMany(Notification, { foreignKey: 'orderId', as: 'notifications' });
     Notification.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });

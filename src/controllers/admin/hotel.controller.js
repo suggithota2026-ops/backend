@@ -188,14 +188,24 @@ const deleteHotel = async (request, reply) => {
       return sendError(reply, 'Hotel not found', 404);
     }
 
-    // Check if hotel has orders
-    const orderCount = await Order.count({ where: { hotelId: id } });
-    if (orderCount > 0) {
-      return sendError(reply, 'Cannot delete hotel with existing orders', 400);
+    // Check if hotel has any pending or active orders
+    // Allow deletion only if all orders are 'confirmed' (completed)
+    const pendingOrders = await Order.count({
+      where: {
+        hotelId: id,
+        status: {
+          [Op.ne]: 'confirmed' // Not equal to 'confirmed'
+        }
+      }
+    });
+
+    if (pendingOrders > 0) {
+      return sendError(reply, 'Cannot delete hotel with pending or active orders. Only hotels with all orders marked as "confirmed" can be deleted.', 400);
     }
 
     await hotel.destroy();
 
+    logger.info(`Hotel deleted: ${id} - ${hotel.hotelName}`);
     return sendSuccess(reply, null, 'Hotel deleted successfully');
   } catch (error) {
     logger.error('Error deleting hotel:', error);
