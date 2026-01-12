@@ -18,9 +18,18 @@ const buildApp = async () => {
 
     // Serve static files
     const path = require('path');
+    
+    // Determine the uploads directory path based on environment
+    const uploadsPath = process.env.NODE_ENV === 'production' 
+      ? path.join(__dirname, '../uploads')
+      : path.join(__dirname, '../uploads');
+    
     await fastify.register(require('@fastify/static'), {
-      root: path.join(__dirname, '../uploads'),
+      root: uploadsPath,
       prefix: '/uploads/',
+      // Enable caching in production
+      cacheControl: process.env.NODE_ENV === 'production',
+      maxAge: process.env.NODE_ENV === 'production' ? '1d' : '5m',
     });
 
     // Global rate limiting
