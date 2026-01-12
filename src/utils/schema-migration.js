@@ -1,3 +1,4 @@
+// Schema migration utility - runs on server startup
 const { sequelize } = require('../config/db');
 const { QueryTypes } = require('sequelize');
 const logger = require('../utils/logger');
