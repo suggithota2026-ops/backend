@@ -75,15 +75,24 @@ const getNotifications = async (request, reply) => {
     const { page = 1, limit = 20, isRead } = request.query;
 
     const where = {
-      [Op.or]: [
-        { recipientId: userId },
+      [Op.and]: [
         {
-          recipientId: null, // Broadcast notifications
           type: {
-            [Op.notIn]: ['new_order', 'order_cancelled', 'admin_message'] // Exclude admin-specific notifications
+            [Op.ne]: 'offer' // Exclude offers (handled by separate endpoint)
           }
         },
-      ],
+        {
+          [Op.or]: [
+            { recipientId: userId },
+            {
+              recipientId: null, // Broadcast notifications
+              type: {
+                [Op.notIn]: ['new_order', 'order_cancelled', 'admin_message'] // Exclude admin-specific notifications
+              }
+            },
+          ],
+        }
+      ]
     };
 
     if (isRead !== undefined) {
@@ -127,15 +136,24 @@ const markNotificationAsRead = async (request, reply) => {
     const notification = await Notification.findOne({
       where: {
         id,
-        [Op.or]: [
-          { recipientId: userId },
+        [Op.and]: [
           {
-            recipientId: null,
             type: {
-              [Op.notIn]: ['new_order', 'order_cancelled', 'admin_message'] // Exclude admin-specific notifications
+              [Op.ne]: 'offer' // Exclude offers (handled by separate endpoint)
             }
           },
-        ],
+          {
+            [Op.or]: [
+              { recipientId: userId },
+              {
+                recipientId: null,
+                type: {
+                  [Op.notIn]: ['new_order', 'order_cancelled', 'admin_message'] // Exclude admin-specific notifications
+                }
+              },
+            ],
+          }
+        ]
       },
     });
 
