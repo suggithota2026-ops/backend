@@ -1,6 +1,7 @@
 // Admin notifications routes
 const {
     getNotifications,
+    pushPromotionalOffer,
     markAsRead,
 } = require('../../controllers/admin/notifications.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
@@ -38,6 +39,30 @@ const notificationRoutes = async (fastify, options) => {
         },
         // preHandler: [authenticate, requireAdmin],
     }, markAsRead);
+    
+    // New route for pushing promotional offers
+    fastify.post('/notifications/promotional-offer', {
+        schema: {
+            tags: ['admin'],
+            summary: 'Push promotional offer notification',
+            security: [{ bearerAuth: [] }],
+            body: {
+                type: 'object',
+                required: ['title', 'description', 'discountType', 'discountValue', 'validUntil'],
+                properties: {
+                    title: { type: 'string' },
+                    description: { type: 'string' },
+                    promoCode: { type: 'string' },
+                    discountType: { type: 'string', enum: ['percentage', 'flat'] },
+                    discountValue: { type: 'number' },
+                    validUntil: { type: 'string', format: 'date' },
+                    categoryIds: { type: 'array', items: { type: 'integer' } },
+                    subcategoryNames: { type: 'array', items: { type: 'string' } },
+                },
+            },
+        },
+        preHandler: [authenticate, requireAdmin],
+    }, pushPromotionalOffer);
 };
 
 module.exports = notificationRoutes;

@@ -4,6 +4,7 @@ const contactRoutes = require('./contact.routes');
 const userProductRoutes = require('./user/products.routes');
 const userOrderRoutes = require('./user/orders.routes');
 const userProfileRoutes = require('./user/profile.routes');
+const userCouponRoutes = require('./user/coupons.routes');
 const adminDashboardRoutes = require('./admin/dashboard.routes');
 const adminAuthRoutes = require('./admin/auth.routes');
 const adminProductRoutes = require('./admin/products.routes');
@@ -26,6 +27,7 @@ const registerRoutes = async (fastify) => {
   await fastify.register(userProductRoutes, { prefix: '/api/user' });
   await fastify.register(userOrderRoutes, { prefix: '/api/user' });
   await fastify.register(userProfileRoutes, { prefix: '/api/user' });
+  await fastify.register(userCouponRoutes, { prefix: '/api/user' });
 
   // Admin routes
   await fastify.register(adminAuthRoutes, { prefix: '/api/admin' });

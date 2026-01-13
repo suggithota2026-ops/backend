@@ -38,6 +38,13 @@ const defineAssociations = () => {
 
     // ContactMessage has no associations (standalone table)
     // Just ensure it's loaded for table creation
+    
+    // Load Coupon model for table creation
+    const Coupon = require('./coupon.model');
+    
+    // Order and Coupon association (if coupons are applied to orders)
+    Order.hasOne(Coupon, { foreignKey: 'orderId', as: 'appliedCoupon' });
+    Coupon.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
 };
 
 module.exports = defineAssociations;

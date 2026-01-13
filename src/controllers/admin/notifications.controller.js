@@ -1,9 +1,14 @@
 // Admin notifications controller
-const { Op } = require('sequelize');
+const { Op, col } = require('sequelize');
+const { sequelize } = require('../../config/db');
 const Notification = require('../../models/notification.model');
 const Order = require('../../models/order.model');
+const Category = require('../../models/category.model');
+const Coupon = require('../../models/coupon.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
+const { createNotification } = require('../../services/notification.service');
+const { generateUniquePromoCode } = require('../../utils/couponGenerator');
 
 const getNotifications = async (request, reply) => {
     try {
@@ -17,6 +22,7 @@ const getNotifications = async (request, reply) => {
                     NOTIFICATION_TYPES.ORDER_CANCELLED,     // Orders cancelled by users  
                     NOTIFICATION_TYPES.ADMIN_MESSAGE,       // Admin-specific messages
                     NOTIFICATION_TYPES.BROADCAST,           // Broadcast notifications
+                    NOTIFICATION_TYPES.OFFER,               // Promotional offers
                 ],
             },
         };
@@ -54,6 +60,144 @@ const getNotifications = async (request, reply) => {
     }
 };
 
+const pushPromotionalOffer = async (request, reply) => {
+    try {
+        const {
+            title,
+            description,
+            promoCode,
+            discountType,
+            discountValue,
+            validUntil,
+            categoryIds,
+            subcategoryNames
+        } = request.body;
+
+        // Validate required fields
+        if (!title || !description || !discountType || !discountValue || !validUntil) {
+            return sendError(reply, 'Missing required fields', 400);
+        }
+
+        if (!['percentage', 'flat'].includes(discountType)) {
+            return sendError(reply, 'Invalid discount type. Must be percentage or flat', 400);
+        }
+
+        // Check if categories exist if provided
+        if (categoryIds && categoryIds.length > 0) {
+            const categories = await Category.findAll({
+                where: { id: { [Op.in]: categoryIds } },
+                attributes: ['id', 'name', 'subcategories']
+            });
+            
+            if (categories.length !== categoryIds.length) {
+                return sendError(reply, 'One or more categories not found', 404);
+            }
+            
+            // Validate subcategory names against the categories' subcategories
+            if (subcategoryNames && subcategoryNames.length > 0) {
+                for (const category of categories) {
+                    // If the category has no subcategories defined but subcategory names are provided
+                    if (!category.subcategories || !Array.isArray(category.subcategories) || category.subcategories.length === 0) {
+                        if (subcategoryNames.length > 0) {
+                            return sendError(reply, `Category '${category.name}' has no subcategories defined. Cannot target specific subcategories.`, 400);
+                        }
+                    } else {
+                        // If the category has subcategories defined, validate that requested ones exist
+                        const availableSubcategories = category.subcategories.map(sc => sc.name);
+                        
+                        // Check if all requested subcategory names exist in this category
+                        const invalidSubcategories = subcategoryNames.filter(
+                            subcatName => !availableSubcategories.includes(subcatName)
+                        );
+                        
+                        if (invalidSubcategories.length > 0) {
+                            return sendError(reply, `Invalid subcategories for category '${category.name}': ${invalidSubcategories.join(', ')}`, 400);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Generate coupon code if not provided
+        let finalPromoCode = promoCode;
+        if (!finalPromoCode) {
+            // Generate a unique promo code
+            finalPromoCode = await generateUniquePromoCode(title, Coupon);
+            
+            // Create a coupon record
+            await Coupon.create({
+                code: finalPromoCode,
+                discountType,
+                discountValue,
+                validFrom: new Date(),
+                validUntil: new Date(Date.now() + 24 * 60 * 60 * 1000), // Expires in 24 hours
+                isActive: true,
+                createdBy: request.user?.id, // Assuming user ID is available from auth middleware
+                metadata: {
+                    offerTitle: title,
+                    offerDescription: description,
+                    categoryIds: categoryIds || [],
+                    subcategoryNames: subcategoryNames || [],
+                    originalValidUntil: validUntil // Store original validUntil for reference
+                }
+            });
+        } else {
+            // If promo code is provided, still create the coupon record
+            // Check if the provided promo code already exists
+            const existingCoupon = await Coupon.findOne({
+                where: { code: finalPromoCode.toUpperCase() }
+            });
+            
+            if (existingCoupon) {
+                return sendError(reply, 'Promo code already exists. Please use a unique code.', 400);
+            }
+            
+            await Coupon.create({
+                code: finalPromoCode.toUpperCase(),
+                discountType,
+                discountValue,
+                validFrom: new Date(),
+                validUntil: new Date(Date.now() + 24 * 60 * 60 * 1000), // Expires in 24 hours
+                isActive: true,
+                createdBy: request.user?.id, // Assuming user ID is available from auth middleware
+                metadata: {
+                    offerTitle: title,
+                    offerDescription: description,
+                    categoryIds: categoryIds || [],
+                    subcategoryNames: subcategoryNames || [],
+                    originalValidUntil: validUntil // Store original validUntil for reference
+                }
+            });
+        }
+
+        // Create promotional offer notification
+        const notificationData = {
+            type: 'offer',
+            title,
+            message: description,
+            recipient: null, // Broadcast to all users
+            metadata: {
+                promoCode: finalPromoCode,
+                discountType,
+                discountValue,
+                validUntil: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour expiry for promo codes
+                categoryIds: categoryIds || [],
+                subcategoryNames: subcategoryNames || [],
+                offerType: 'promotional'
+            }
+        };
+
+        const notification = await createNotification(notificationData);
+
+        return sendSuccess(reply, {
+            notification
+        }, 'Promotional offer pushed successfully');
+    } catch (error) {
+        logger.error('Error pushing promotional offer:', error);
+        return sendError(reply, 'Failed to push promotional offer', 500);
+    }
+};
+
 const markAsRead = async (request, reply) => {
     try {
         const { id } = request.params;
@@ -72,7 +216,95 @@ const markAsRead = async (request, reply) => {
     }
 };
 
+const validateCoupon = async (request, reply) => {
+    try {
+        const { code } = request.body;
+        
+        if (!code) {
+            return sendError(reply, 'Coupon code is required', 400);
+        }
+        
+        // Find active coupon with the given code
+        const coupon = await Coupon.findOne({
+            where: {
+                code: code.toUpperCase(),
+                isActive: true,
+                validFrom: { [Op.lte]: new Date() },
+                validUntil: { [Op.gte]: new Date() },
+                [Op.or]: [
+                    { usageLimit: null }, // Unlimited usage
+                    { [Op.col]: 'usedCount', [Op.lt]: sequelize.col('usageLimit') }, // Within usage limit
+                ]
+            }
+        });
+        
+        if (!coupon) {
+            return sendError(reply, 'Invalid or expired coupon code', 404);
+        }
+        
+        // Return coupon details
+        return sendSuccess(reply, {
+            code: coupon.code,
+            discountType: coupon.discountType,
+            discountValue: parseFloat(coupon.discountValue),
+            validUntil: coupon.validUntil,
+            minOrderAmount: parseFloat(coupon.minOrderAmount || 0),
+            maxDiscountAmount: coupon.maxDiscountAmount ? parseFloat(coupon.maxDiscountAmount) : null,
+        }, 'Coupon validated successfully');
+        
+    } catch (error) {
+        logger.error('Error validating coupon:', error);
+        return sendError(reply, 'Failed to validate coupon', 500);
+    }
+};
+
+const redeemCoupon = async (request, reply) => {
+    try {
+        const { code } = request.body;
+        
+        if (!code) {
+            return sendError(reply, 'Coupon code is required', 400);
+        }
+        
+        // Find active coupon with the given code
+        const coupon = await Coupon.findOne({
+            where: {
+                code: code.toUpperCase(),
+                isActive: true,
+                validFrom: { [Op.lte]: new Date() },
+                validUntil: { [Op.gte]: new Date() },
+                [Op.or]: [
+                    { usageLimit: null }, // Unlimited usage
+                    { [Op.col]: 'usedCount', [Op.lt]: sequelize.col('usageLimit') }, // Within usage limit
+                ]
+            }
+        });
+        
+        if (!coupon) {
+            return sendError(reply, 'Invalid or expired coupon code', 404);
+        }
+        
+        // Increment used count
+        await coupon.increment('usedCount');
+        
+        // Return coupon details
+        return sendSuccess(reply, {
+            code: coupon.code,
+            discountType: coupon.discountType,
+            discountValue: parseFloat(coupon.discountValue),
+            validUntil: coupon.validUntil,
+            minOrderAmount: parseFloat(coupon.minOrderAmount || 0),
+            maxDiscountAmount: coupon.maxDiscountAmount ? parseFloat(coupon.maxDiscountAmount) : null,
+        }, 'Coupon redeemed successfully');
+        
+    } catch (error) {
+        logger.error('Error redeeming coupon:', error);
+        return sendError(reply, 'Failed to redeem coupon', 500);
+    }
+};
+
 module.exports = {
     getNotifications,
+    pushPromotionalOffer,
     markAsRead,
 };

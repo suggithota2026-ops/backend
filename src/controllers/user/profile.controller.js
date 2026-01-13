@@ -77,7 +77,12 @@ const getNotifications = async (request, reply) => {
     const where = {
       [Op.or]: [
         { recipientId: userId },
-        { recipientId: null }, // Broadcast notifications
+        {
+          recipientId: null, // Broadcast notifications
+          type: {
+            [Op.notIn]: ['new_order', 'order_cancelled', 'admin_message'] // Exclude admin-specific notifications
+          }
+        },
       ],
     };
 
@@ -124,7 +129,12 @@ const markNotificationAsRead = async (request, reply) => {
         id,
         [Op.or]: [
           { recipientId: userId },
-          { recipientId: null },
+          {
+            recipientId: null,
+            type: {
+              [Op.notIn]: ['new_order', 'order_cancelled', 'admin_message'] // Exclude admin-specific notifications
+            }
+          },
         ],
       },
     });
