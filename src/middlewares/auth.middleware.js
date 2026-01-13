@@ -83,7 +83,7 @@ const requireRole = (...allowedRoles) => {
   };
 };
 
-const authorizeAdmin = requireRole('ADMIN', 'Super Admin');
+const authorizeAdmin = requireRole('ADMIN', 'super_admin');
 
 module.exports = {
   authenticate,
