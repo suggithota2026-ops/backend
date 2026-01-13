@@ -17,12 +17,11 @@ const getNotifications = async (request, reply) => {
 
         const where = {
             type: {
-                [Op.in]: [
-                    NOTIFICATION_TYPES.NEW_ORDER,           // New orders placed by users
-                    NOTIFICATION_TYPES.ORDER_CANCELLED,     // Orders cancelled by users  
-                    NOTIFICATION_TYPES.ADMIN_MESSAGE,       // Admin-specific messages
-                    NOTIFICATION_TYPES.BROADCAST,           // Broadcast notifications
-                    NOTIFICATION_TYPES.OFFER,               // Promotional offers
+                [Op.in]: [  // Only show notifications that originate from user actions
+                    'new_order',        // When a user places a new order
+                    'order_cancelled',  // When a user cancels an order
+                    'admin_message',    // Admin messages (like contact inquiries)
+                    'broadcast'       // General broadcast notifications
                 ],
             },
         };

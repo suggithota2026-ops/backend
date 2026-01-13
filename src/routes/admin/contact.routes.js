@@ -7,8 +7,7 @@ const {
   acceptEnquiry,
   rejectEnquiry,
 } = require('../../controllers/contact.controller');
-const { authenticate } = require('../../middlewares/auth.middleware');
-const { requireAdmin } = require('../../middlewares/admin.middleware');
+const { authenticate, authorizeAdmin } = require('../../middlewares/auth.middleware');
 
 const adminContactRoutes = async (fastify, options) => {
   // Get all contact messages
@@ -26,7 +25,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    // preHandler: [authenticate, requireAdmin],
+    preHandler: [authenticate, authorizeAdmin],
   }, getContactMessages);
 
   // Get single contact message
@@ -42,7 +41,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    // preHandler: [authenticate, requireAdmin],
+    preHandler: [authenticate, authorizeAdmin],
   }, getContactMessage);
 
   // Update contact message
@@ -65,7 +64,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    // preHandler: [authenticate, requireAdmin],
+    preHandler: [authenticate, authorizeAdmin],
   }, updateContactMessage);
 
   // Delete contact message
@@ -81,7 +80,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    // preHandler: [authenticate, requireAdmin],
+    preHandler: [authenticate, authorizeAdmin],
   }, deleteContactMessage);
 
   // Accept enquiry (create hotel account)
@@ -97,7 +96,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    // preHandler: [authenticate, requireAdmin],
+    preHandler: [authenticate, authorizeAdmin],
   }, acceptEnquiry);
 
   // Reject enquiry
@@ -119,7 +118,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    // preHandler: [authenticate, requireAdmin],
+    preHandler: [authenticate, authorizeAdmin],
   }, rejectEnquiry);
 };
 

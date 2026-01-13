@@ -37,8 +37,29 @@ const getOffers = async (request, reply) => {
       limit: parseInt(limit),
     });
 
+    // Enhance offers with additional information from metadata
+    const enhancedOffers = offers.map(offer => {
+      const enhancedOffer = offer.toJSON();
+      
+      // Extract offer details from metadata
+      const metadata = enhancedOffer.metadata || {};
+      
+      return {
+        ...enhancedOffer,
+        title: enhancedOffer.title,
+        description: enhancedOffer.message,
+        promoCode: metadata.promoCode || '',
+        discountType: metadata.discountType || '',
+        discountValue: metadata.discountValue || 0,
+        validUntil: metadata.validUntil || null,
+        categoryIds: metadata.categoryIds || [],
+        subcategoryNames: metadata.subcategoryNames || [],
+        offerType: metadata.offerType || 'promotional',
+      };
+    });
+
     return sendSuccess(reply, {
-      offers,
+      offers: enhancedOffers,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
