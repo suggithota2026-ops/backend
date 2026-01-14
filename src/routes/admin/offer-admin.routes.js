@@ -5,7 +5,7 @@ const {
   updateAdminOffer, 
   deleteAdminOffer 
 } = require('../../controllers/admin/offer.controller');
-const { authenticate, authorizeAdmin } = require('../../middlewares/auth.middleware');
+const { authenticate, authorizeAdmin, requireSuperAdmin } = require('../../middlewares/auth.middleware');
 const { sendValidationError } = require('../../utils/response');
 
 const offerAdminRoutes = async (fastify, options) => {

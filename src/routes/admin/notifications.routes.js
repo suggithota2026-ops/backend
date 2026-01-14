@@ -4,7 +4,7 @@ const {
     pushPromotionalOffer,
     markAsRead,
 } = require('../../controllers/admin/notifications.controller');
-const { authenticate } = require('../../middlewares/auth.middleware');
+const { authenticate, requireSuperAdmin } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/admin.middleware');
 
 const notificationRoutes = async (fastify, options) => {
