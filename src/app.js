@@ -1,5 +1,9 @@
 // Fastify app initialization
-const fastify = require('fastify')({ logger: true });
+const fastify = require('fastify')({ 
+  logger: true,
+  // Increase body limit to handle base64 image uploads (10MB)
+  bodyLimit: 10 * 1024 * 1024
+});
 const registerRoutes = require('./routes');
 const authPlugin = require('./plugins/auth');
 const corsPlugin = require('./plugins/cors');

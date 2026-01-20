@@ -6,6 +6,7 @@ const Invoice = require('./invoice.model');
 const Notification = require('./notification.model');
 const Admin = require('./admin.model');
 const ContactMessage = require('./contact.model');
+const Brand = require('./brand.model');
 
 const defineAssociations = () => {
     // User & Order (Already defined in order.model.js but good to centralize or ensure)
@@ -38,6 +39,11 @@ const defineAssociations = () => {
 
     // ContactMessage has no associations (standalone table)
     // Just ensure it's loaded for table creation
+    
+    // Brand associations are defined in the Brand model's associate function
+    if (Brand.associate) {
+        Brand.associate({ User });
+    }
     
     // Load Coupon model for table creation
     const Coupon = require('./coupon.model');
