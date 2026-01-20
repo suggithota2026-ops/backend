@@ -54,7 +54,7 @@ const getAllBrands = async (request, reply) => {
     const brandsWithCreators = [];
     for (const brand of brands) {
       const b = brand.toJSON();
-      // For backwards compatibility, assume admin type for existing brands
+      // Use admin type since brands are created by admins
       const creator = await getCreatorInfo(b.createdBy, 'admin');
       brandsWithCreators.push({
         ...b,

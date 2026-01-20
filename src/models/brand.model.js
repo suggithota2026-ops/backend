@@ -45,7 +45,7 @@ const Brand = sequelize.define('Brand', {
 
 // Define associations after model definition
 Brand.associate = (models) => {
-  Brand.belongsTo(models.User, {
+  Brand.belongsTo(models.Admin, {
     foreignKey: 'createdBy',
     as: 'creator',
     onDelete: 'SET NULL',
@@ -53,7 +53,7 @@ Brand.associate = (models) => {
   });
   
   // Also define the reverse association
-  models.User.hasMany(Brand, {
+  models.Admin.hasMany(Brand, {
     foreignKey: 'createdBy',
     as: 'createdBrands'
   });

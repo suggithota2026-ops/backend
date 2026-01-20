@@ -42,7 +42,7 @@ const defineAssociations = () => {
     
     // Brand associations are defined in the Brand model's associate function
     if (Brand.associate) {
-        Brand.associate({ User });
+        Brand.associate({ User, Admin });
     }
     
     // Load Coupon model for table creation
