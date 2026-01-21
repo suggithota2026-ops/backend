@@ -113,7 +113,7 @@ const getFileUrl = (filePath) => {
 
 const transformProductImages = (product, request) => {
   const p = product.toJSON();
-  
+
   // Transform image paths to full URLs
   if (p.images && Array.isArray(p.images)) {
     p.images = p.images.map(img => {
@@ -130,7 +130,7 @@ const transformProductImages = (product, request) => {
       return img;
     });
   }
-  
+
   return p;
 };
 
@@ -304,9 +304,10 @@ const getProducts = async (request, reply) => {
 
     const productsWithCategory = products.map(product => {
       const p = transformProductImages(product, request);
-      
+
       return {
         ...p,
+        minQuantity: p.stock,
         category: {
           id: p.categoryId,
           name: categoryMap.get(p.categoryId) || null
@@ -350,7 +351,7 @@ const getProduct = async (request, reply) => {
     });
 
     const productData = product.toJSON();
-    
+
     // Transform image paths to full URLs
     if (productData.images && Array.isArray(productData.images)) {
       productData.images = productData.images.map(img => {
@@ -369,6 +370,7 @@ const getProduct = async (request, reply) => {
 
     const productWithCategory = {
       ...productData,
+      minQuantity: productData.stock,
       category: category ? { name: category.name } : null,
     };
 
@@ -618,11 +620,9 @@ const updateStock = async (request, reply) => {
     }
 
     const updateData = { stock: parseFloat(stock) };
-    if (stock <= product.minStockLevel) {
-      updateData.status = 'out_of_stock';
-    } else if (product.status === 'out_of_stock') {
-      updateData.status = 'active';
-    }
+
+    // Removed legacy logic that set status to out_of_stock if stock <= minStockLevel
+    // Since stock is now Minimum Order Quantity, a low value is valid and shouldn't disable the product.
 
     await product.update(updateData);
 
@@ -685,7 +685,7 @@ const getProductsBySubcategory = async (request, reply) => {
 
     const productsWithCategory = products.map(product => {
       const p = transformProductImages(product, request);
-      
+
       return {
         ...p,
         category: {

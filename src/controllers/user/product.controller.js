@@ -152,6 +152,7 @@ const getProducts = async (request, reply) => {
       const p = transformProductImages(product, request);
       return {
         ...p,
+        minQuantity: p.stock,
         name: p.name,
         category: {
           id: p.categoryId,
@@ -235,7 +236,7 @@ const getProduct = async (request, reply) => {
         description: category.description,
         image: categoryImage,
       },
-      products: productsWithImages,
+      products: productsWithImages.map(p => ({ ...p, minQuantity: p.stock })),
       count: products.length,
     };
 
@@ -296,6 +297,7 @@ const getProductsBySubcategory = async (request, reply) => {
       const p = transformProductImages(product, request);
       return {
         ...p,
+        minQuantity: p.stock,
         name: p.name,
         category: {
           id: p.categoryId,

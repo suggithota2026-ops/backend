@@ -48,21 +48,22 @@ const createOrder = async (request, reply) => {
         logger.error(`Invalid product ID: ${item.product}`);
         return sendError(reply, `Invalid product ID: ${item.product}`, 400);
       }
-      
+
       const product = await Product.findByPk(productId);
       if (!product) {
         logger.error(`Product not found: ${productId}`);
         return sendError(reply, `Product ${item.product} not found`, 400);
       }
-      
+
       if (!product.isActive || product.status !== 'active') {
         logger.error(`Product not available: ${productId}, isActive: ${product.isActive}, status: ${product.status}`);
         return sendError(reply, `Product ${item.product} not available`, 400);
       }
 
-      if (product.stock < item.quantity) {
-        logger.error(`Insufficient stock for product ${productId}: requested ${item.quantity}, available ${product.stock}`);
-        return sendError(reply, `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}`, 400);
+      if (item.quantity < product.stock) {
+        // Validation for Minimum Order Quantity
+        // product.stock now represents the Minimum Order Quantity
+        return sendError(reply, `Minimum order quantity for ${product.name} is ${product.stock} ${product.unit || 'units'}.`, 400);
       }
 
       const unitPrice = parseFloat(product.price);
@@ -96,7 +97,9 @@ const createOrder = async (request, reply) => {
     // Reload order to get orderNumber (generated in beforeCreate hook)
     await order.reload();
 
-    // Update product stock
+    // Update product stock - REMOVED
+    // We are now using 'stock' as Minimum Order Quantity, so it should not decrease.
+    /*
     for (const item of items) {
       const productId = parseInt(item.product);
       const product = await Product.findByPk(productId);
@@ -106,6 +109,7 @@ const createOrder = async (request, reply) => {
         });
       }
     }
+    */
 
     // Fetch hotel information to include in response
     const hotel = await User.findByPk(finalHotelId, {
@@ -181,7 +185,7 @@ const getOrder = async (request, reply) => {
     const userId = request.user.id;
     const { id } = request.params;
     const orderId = parseInt(id);
-    
+
     if (isNaN(orderId)) {
       return sendError(reply, 'Invalid order ID', 400);
     }
@@ -192,7 +196,7 @@ const getOrder = async (request, reply) => {
         hotelId: parseInt(userId),
       },
     });
-    
+
     if (!order) {
       return sendError(reply, 'Order not found', 404);
     }
@@ -209,7 +213,7 @@ const reorder = async (request, reply) => {
     const userId = request.user.id;
     const { orderId } = request.body;
     const prevOrderId = parseInt(orderId);
-    
+
     if (isNaN(prevOrderId)) {
       return sendError(reply, 'Invalid order ID', 400);
     }
@@ -220,7 +224,7 @@ const reorder = async (request, reply) => {
         hotelId: parseInt(userId),
       },
     });
-    
+
     if (!previousOrder) {
       return sendError(reply, 'Previous order not found', 404);
     }
@@ -252,7 +256,7 @@ const getInvoice = async (request, reply) => {
     const userId = request.user.id;
     const { orderId } = request.params;
     const orderIdInt = parseInt(orderId);
-    
+
     if (isNaN(orderIdInt)) {
       return sendError(reply, 'Invalid order ID', 400);
     }

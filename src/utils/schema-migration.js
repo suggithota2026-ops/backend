@@ -39,6 +39,10 @@ const runSchemaMigration = async () => {
         await addColumnIfNotExists('products', 'pricingType', "VARCHAR(50) DEFAULT 'fixed'");
         await addColumnIfNotExists('products', 'createdById', 'INTEGER REFERENCES "admins"("id")');
 
+        // 4. Check Users table (Fix for rateType/pricePerUnit error)
+        await addColumnIfNotExists('users', 'rateType', 'VARCHAR(50)');
+        await addColumnIfNotExists('users', 'pricePerUnit', 'DECIMAL(10, 2)');
+
         logger.info('Schema migration check completed.');
     } catch (error) {
         logger.error('Schema migration failed:', error);
