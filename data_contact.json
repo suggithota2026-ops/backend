@@ -1,0 +1,9 @@
+{
+    "hotelName": "TestHotelFile",
+    "contactNumber": "9999999999",
+    "address": "Test Address File",
+    "city": "Test City",
+    "pinCode": "123456",
+    "message": "Test Message File",
+    "email": "testfile@example.com"
+}
