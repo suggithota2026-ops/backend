@@ -21,6 +21,27 @@ const sendMessage = async (request, reply) => {
       message,
     } = request.body;
 
+    // Check if user already exists
+    const existingUser = await User.findOne({ where: { mobileNumber: contactNumber } });
+    if (existingUser) {
+      if (existingUser.isBlocked) {
+        return sendError(reply, 'Your account has been blocked. Please contact support.', 403);
+      }
+      return sendError(reply, 'Account already exists with this mobile number. Please login to continue.', 400);
+    }
+
+    // Check for pending enquiry
+    const pendingEnquiry = await ContactMessage.findOne({
+      where: {
+        contactNumber,
+        status: 'pending'
+      }
+    });
+
+    if (pendingEnquiry) {
+      return sendError(reply, 'A request with this mobile number is already pending. We will review it shortly.', 400);
+    }
+
     // Create contact message
     const contactMessage = await ContactMessage.create({
       hotelName,

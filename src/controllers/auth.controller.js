@@ -1,5 +1,6 @@
 // Auth business logic
 const User = require('../models/user.model');
+const ContactMessage = require('../models/contact.model');
 const { generateOTPWithExpiry, verifyOTP: verifyOTPService, sendOTP: sendOTPService } = require('../services/otp.service');
 const { sendSuccess, sendError } = require('../utils/response');
 const logger = require('../utils/logger');
@@ -15,6 +16,22 @@ const sendOTP = async (request, reply) => {
 
     // If user doesn't exist, they need to submit enquiry first
     if (!user) {
+      // Check if there is a pending enquiry for this number
+      const pendingEnquiry = await ContactMessage.findOne({
+        where: {
+          contactNumber: mobileNumber,
+          status: 'pending'
+        }
+      });
+
+      if (pendingEnquiry) {
+        return sendError(
+          reply,
+          'Your registration request is pending admin approval. Please wait for confirmation.',
+          403 // Forbidden/Pending
+        );
+      }
+
       return sendError(
         reply,
         'No account found with this number. Please submit an enquiry through our website first.',
@@ -44,7 +61,7 @@ const sendOTP = async (request, reply) => {
 
     // Generate and send OTP for existing users
     const otpData = generateOTPWithExpiry();
-    
+
     // Update OTP for existing user
     user.otpCode = otpData.code;
     user.otpExpiresAt = otpData.expiresAt;
@@ -93,10 +110,10 @@ const sendOTP = async (request, reply) => {
     logger.info('Sending response with OTP:', JSON.stringify(response, null, 2));
     console.log('Controller - Final response object:', JSON.stringify(response, null, 2));
     console.log('Controller - Response data:', response.data);
-    
+
     // Ensure content type is set
     reply.type('application/json');
-    
+
     return reply.status(200).send(response);
   } catch (error) {
     logger.error('Error sending OTP:', error);
