@@ -13,6 +13,8 @@ const createHotelSchema = Joi.object({
     .optional()
     .allow(''),
   creditLimit: Joi.number().min(0).default(0),
+  rateType: Joi.string().trim().max(50).optional(),
+  pricePerUnit: Joi.number().min(0).optional(),
 });
 
 const updateHotelSchema = Joi.object({
@@ -25,6 +27,8 @@ const updateHotelSchema = Joi.object({
     .allow(''),
   creditLimit: Joi.number().min(0).optional(),
   isBlocked: Joi.boolean().optional(),
+  rateType: Joi.string().trim().max(50).optional(),
+  pricePerUnit: Joi.number().min(0).optional(),
 }).unknown(true);
 
 module.exports = {

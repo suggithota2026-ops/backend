@@ -5,6 +5,7 @@ const Notification = require('../../models/notification.model');
 const Order = require('../../models/order.model');
 const Category = require('../../models/category.model');
 const Coupon = require('../../models/coupon.model');
+const User = require('../../models/user.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
 const { createNotification } = require('../../services/notification.service');
@@ -69,7 +70,8 @@ const pushPromotionalOffer = async (request, reply) => {
             discountValue,
             validUntil,
             categoryIds,
-            subcategoryNames
+            subcategoryNames,
+            hotelIds
         } = request.body;
 
         // Validate required fields
@@ -174,7 +176,7 @@ const pushPromotionalOffer = async (request, reply) => {
             type: 'offer',
             title,
             message: description,
-            recipient: null, // Broadcast to all users
+            recipient: null, // Will be set to specific users if hotelIds provided
             metadata: {
                 promoCode: finalPromoCode,
                 discountType,
@@ -182,11 +184,50 @@ const pushPromotionalOffer = async (request, reply) => {
                 validUntil: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour expiry for promo codes
                 categoryIds: categoryIds || [],
                 subcategoryNames: subcategoryNames || [],
+                hotelIds: hotelIds || [], // Store hotel IDs for targeted offers
                 offerType: 'promotional'
             }
         };
 
-        const notification = await createNotification(notificationData);
+        let notification;
+        
+        // If specific hotels are selected, create individual notifications for each
+        if (hotelIds && hotelIds.length > 0) {
+            // Validate that the specified hotels exist
+            const targetHotels = await User.findAll({
+                where: { id: { [Op.in]: hotelIds } },
+                attributes: ['id', 'role']
+            });
+            
+            if (targetHotels.length !== hotelIds.length) {
+                // Some hotels don't exist
+                const foundHotelIds = targetHotels.map(hotel => hotel.id);
+                const invalidHotelIds = hotelIds.filter(id => !foundHotelIds.includes(id));
+                return sendError(reply, `One or more hotels not found: ${invalidHotelIds.join(', ')}`, 404);
+            }
+            
+            // Check if all target users have the 'hotel' role
+            const nonHotelUsers = targetHotels.filter(user => user.role !== 'hotel');
+            if (nonHotelUsers.length > 0) {
+                return sendError(reply, 'Selected users are not hotels/customers', 400);
+            }
+            
+            // Create individual notifications for each target hotel
+            const createdNotifications = [];
+            for (const hotelId of hotelIds) {
+                const individualNotificationData = {
+                    ...notificationData,
+                    recipientId: hotelId
+                };
+                const individualNotification = await createNotification(individualNotificationData);
+                createdNotifications.push(individualNotification);
+            }
+            
+            notification = createdNotifications[0]; // Return the first one for the response
+        } else {
+            // Create a broadcast notification for all users
+            notification = await createNotification(notificationData);
+        }
 
         return sendSuccess(reply, {
             notification

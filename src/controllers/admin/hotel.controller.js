@@ -10,7 +10,7 @@ const logger = require('../../utils/logger');
 
 const createHotel = async (request, reply) => {
   try {
-    const { mobileNumber, hotelName, address, gstNumber, creditLimit } = request.body;
+    const { mobileNumber, hotelName, address, gstNumber, creditLimit, rateType, pricePerUnit } = request.body;
 
     // Check if user already exists
     let user = await User.findOne({ where: { mobileNumber } });
@@ -25,6 +25,8 @@ const createHotel = async (request, reply) => {
       address,
       gstNumber: gstNumber?.toUpperCase(),
       creditLimit: creditLimit || 0,
+      rateType,
+      pricePerUnit,
       role: ROLES.HOTEL,
       isVerified: true, // Auto-verify since we are adding manually
     });

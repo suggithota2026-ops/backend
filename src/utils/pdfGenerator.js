@@ -20,10 +20,43 @@ const generateInvoicePDF = (invoice, order, hotel) => {
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
-      // Header
-      doc.fontSize(20).text('PRK SMILES', { align: 'center' });
-      doc.fontSize(14).text('INVOICE', { align: 'center' });
-      doc.moveDown();
+      // Header with logos
+      const logoPath = path.join(__dirname, '../../uploads/image.png');
+      const logoPath1 = path.join(__dirname, '../../uploads/image1.png');
+      
+      // Check if first logo exists and add it to the PDF
+      if (fs.existsSync(logoPath)) {
+        try {
+          doc.image(logoPath, 50, 50, { width: 100 });
+          
+          // Add second logo if it exists
+          if (fs.existsSync(logoPath1)) {
+            doc.image(logoPath1, 400, 50, { width: 100 });
+          }
+          
+          doc.moveDown(2);
+        } catch (error) {
+          // If there's an error loading the logo, fall back to text
+          doc.fontSize(20).text('PRK SMILES', { align: 'center' });
+          doc.fontSize(14).text('INVOICE', { align: 'center' });
+          doc.moveDown();
+        }
+      } else if (fs.existsSync(logoPath1)) {
+        try {
+          doc.image(logoPath1, 50, 50, { width: 100 });
+          doc.moveDown(2);
+        } catch (error) {
+          // If there's an error loading the logo, fall back to text
+          doc.fontSize(20).text('PRK SMILES', { align: 'center' });
+          doc.fontSize(14).text('INVOICE', { align: 'center' });
+          doc.moveDown();
+        }
+      } else {
+        // If neither logo exists, use text only
+        doc.fontSize(20).text('PRK SMILES', { align: 'center' });
+        doc.fontSize(14).text('INVOICE', { align: 'center' });
+        doc.moveDown();
+      }
 
       // Invoice details
       doc.fontSize(10);

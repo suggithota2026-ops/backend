@@ -109,7 +109,8 @@ const updateOffer = async (request, reply) => {
       maxDiscountAmount, 
       usageLimit, 
       isActive, 
-      metadata 
+      metadata,
+      hotelIds
     } = request.body;
 
     const offer = await Coupon.findByPk(id);
@@ -129,7 +130,10 @@ const updateOffer = async (request, reply) => {
       maxDiscountAmount,
       usageLimit,
       isActive,
-      metadata: metadata || offer.metadata
+      metadata: {
+        ...metadata,
+        hotelIds: hotelIds || metadata?.hotelIds || []
+      }
     });
 
     return sendSuccess(reply, { offer }, 'Offer updated successfully');

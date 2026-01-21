@@ -160,9 +160,99 @@ const generateOrderInvoice = async (request, reply) => {
   }
 };
 
+const getTodaysOrdersSummary = async (request, reply) => {
+  try {
+    const { getStartOfDay, getEndOfDay } = require('../../utils/date');
+    
+    // Get today's date range
+    const startOfDay = getStartOfDay();
+    const endOfDay = getEndOfDay();
+    
+    // Fetch today's orders with hotel and items information
+    const orders = await Order.findAll({
+      where: {
+        createdAt: {
+          [Op.gte]: startOfDay,
+          [Op.lte]: endOfDay
+        }
+      },
+      include: [
+        {
+          model: User,
+          as: 'hotel',
+          attributes: ['id', 'hotelName'],
+          required: true
+        }
+      ],
+      order: [['createdAt', 'ASC']]
+    });
+    
+    // Process orders to create client-wise item summary
+    const itemSummary = {};
+    
+    orders.forEach(order => {
+      const clientName = order.hotel.hotelName || `Hotel #${order.hotelId}`;
+      
+      // Process each item in the order
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach(item => {
+          const itemName = item.productName || item.name || 'Unknown Item';
+          const quantity = parseFloat(item.quantity) || 0;
+          
+          // Create unique key for item-client combination
+          const itemKey = `${itemName}`;
+          
+          if (!itemSummary[itemKey]) {
+            itemSummary[itemKey] = {
+              itemName: itemName,
+              clients: {},
+              totalQuantity: 0
+            };
+          }
+          
+          // Add client entry if not exists
+          if (!itemSummary[itemKey].clients[clientName]) {
+            itemSummary[itemKey].clients[clientName] = 0;
+          }
+          
+          // Add quantity to client
+          itemSummary[itemKey].clients[clientName] += quantity;
+          
+          // Add to total quantity
+          itemSummary[itemKey].totalQuantity += quantity;
+        });
+      }
+    });
+    
+    // Convert to array format for easier frontend processing
+    const summaryArray = Object.entries(itemSummary).map(([itemName, data]) => ({
+      itemName: data.itemName,
+      clients: Object.entries(data.clients).map(([clientName, quantity]) => ({
+        clientName,
+        quantity
+      })),
+      totalQuantity: data.totalQuantity
+    }));
+    
+    // Sort by item name
+    summaryArray.sort((a, b) => a.itemName.localeCompare(b.itemName));
+    
+    return sendSuccess(reply, {
+      date: new Date().toISOString().split('T')[0],
+      totalOrders: orders.length,
+      summary: summaryArray
+    }, 'Today\'s orders summary retrieved successfully');
+    
+  } catch (error) {
+    logger.error('Error fetching today\'s orders summary:', error);
+    return sendError(reply, 'Failed to fetch today\'s orders summary', 500);
+  }
+};
+
 module.exports = {
   getOrders,
   getOrder,
   updateOrderStatus,
   generateOrderInvoice,
+  getTodaysOrdersSummary,
 };

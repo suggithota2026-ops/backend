@@ -58,6 +58,7 @@ const notificationRoutes = async (fastify, options) => {
                     validUntil: { type: 'string', format: 'date' },
                     categoryIds: { type: 'array', items: { type: 'integer' } },
                     subcategoryNames: { type: 'array', items: { type: 'string' } },
+                    hotelIds: { type: 'array', items: { type: 'integer' } },
                 },
             },
         },

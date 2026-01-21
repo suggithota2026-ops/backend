@@ -22,12 +22,10 @@ const sendMessageSchema = Joi.object({
     }),
   address: Joi.string()
     .trim()
-    .min(5)
     .max(500)
     .required()
     .messages({
       'string.empty': 'Address is required',
-      'string.min': 'Address must be at least 5 characters',
       'string.max': 'Address must not exceed 500 characters',
     }),
   city: Joi.string()
@@ -62,12 +60,10 @@ const sendMessageSchema = Joi.object({
     }),
   message: Joi.string()
     .trim()
-    .min(10)
     .max(1000)
     .required()
     .messages({
       'string.empty': 'Message is required',
-      'string.min': 'Message must be at least 10 characters',
       'string.max': 'Message must not exceed 1000 characters',
     }),
 });

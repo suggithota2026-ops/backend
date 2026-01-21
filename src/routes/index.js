@@ -20,6 +20,7 @@ const adminContactRoutes = require('./admin/contact.routes');
 const adminOfferRoutes = require('./admin/offers.routes');
 const adminOfferAdminRoutes = require('./admin/offer-admin.routes');
 const adminBrandRoutes = require('./admin/brands.routes');
+const invoiceRoutes = require('./invoiceRoutes');
 
 const registerRoutes = async (fastify) => {
   // Auth routes (no prefix)
@@ -50,6 +51,7 @@ const registerRoutes = async (fastify) => {
   await fastify.register(adminOfferRoutes, { prefix: '/api/admin' });
   await fastify.register(adminOfferAdminRoutes, { prefix: '/api/admin' });
   await fastify.register(adminBrandRoutes, { prefix: '/api/admin/brands' });
+  await fastify.register(invoiceRoutes, { prefix: '/api' });
 
   // Root route
   fastify.get('/', async (request, reply) => {

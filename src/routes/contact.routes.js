@@ -16,12 +16,12 @@ const contactRoutes = async (fastify, options) => {
         properties: {
           hotelName: { type: 'string', minLength: 2, maxLength: 100 },
           contactNumber: { type: 'string', pattern: '^[0-9]{10}$' },
-          address: { type: 'string', minLength: 5, maxLength: 500 },
+          address: { type: 'string', maxLength: 500 },
           city: { type: 'string', minLength: 2, maxLength: 100 },
           pinCode: { type: 'string', pattern: '^[0-9]{6}$' },
           landmark: { type: 'string', maxLength: 200 },
           email: { type: 'string', format: 'email' },
-          message: { type: 'string', minLength: 10, maxLength: 1000 },
+          message: { type: 'string', maxLength: 1000 },
         },
       },
       response: {

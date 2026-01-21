@@ -4,6 +4,7 @@ const {
   getOrder,
   updateOrderStatus,
   generateOrderInvoice,
+  getTodaysOrdersSummary,
 } = require('../../controllers/admin/order.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/admin.middleware');
@@ -89,6 +90,16 @@ const orderRoutes = async (fastify, options) => {
     },
     // preHandler: [authenticate, requireAdmin],
   }, generateOrderInvoice);
+  
+  fastify.get('/orders/today/summary', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Get today\'s orders summary',
+      security: [{ bearerAuth: [] }],
+      description: 'Returns client-wise item summary for today\'s orders with quantities and totals'
+    },
+    // preHandler: [authenticate, requireAdmin],
+  }, getTodaysOrdersSummary);
 };
 
 module.exports = orderRoutes;

@@ -73,6 +73,7 @@ const offerAdminRoutes = async (fastify, options) => {
           usageLimit: { type: 'number' },
           isActive: { type: 'boolean' },
           metadata: { type: 'object' },
+          hotelIds: { type: 'array', items: { type: 'integer' } },
         },
         required: ['code', 'discountType', 'discountValue'],
       },

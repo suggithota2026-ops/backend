@@ -58,6 +58,14 @@ const User = sequelize.define('User', {
     type: DataTypes.DATE,
     allowNull: true,
   },
+  rateType: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+  },
+  pricePerUnit: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+  },
 }, {
   tableName: 'users',
   timestamps: true,

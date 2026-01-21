@@ -652,7 +652,9 @@ Create a new hotel account.
   "hotelName": "Grand Hotel",
   "address": "123 Main Street",
   "gstNumber": "29ABCDE1234F1Z5",
-  "creditLimit": 50000
+  "creditLimit": 50000,
+  "rateType": "Fixed",
+  "pricePerUnit": 100.50
 }
 ```
 
@@ -673,10 +675,50 @@ Get all hotels with pagination.
 #### 3. Get Hotel by ID
 **GET** `/admin/hotels/:id` (Requires Admin)
 
+Retrieve detailed information about a specific hotel account.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Hotel retrieved successfully",
+  "data": {
+    "hotel": {
+      "id": 1,
+      "hotelName": "Grand Hotel",
+      "mobileNumber": "9876543210",
+      "address": "123 Main Street",
+      "gstNumber": "29ABCDE1234F1Z5",
+      "creditLimit": 50000,
+      "rateType": "Fixed",
+      "pricePerUnit": 100.50,
+      "isBlocked": false,
+      "createdAt": "2023-12-01T10:00:00.000Z",
+      "updatedAt": "2023-12-01T10:00:00.000Z"
+    },
+    "orderStats": [...]
+  }
+}
+```
+
 ---
 
 #### 4. Update Hotel
 **PUT** `/admin/hotels/:id` (Requires Admin)
+
+Update existing hotel account information.
+
+**Request Body:**
+```json
+{
+  "hotelName": "Grand Hotel",
+  "address": "123 Main Street",
+  "gstNumber": "29ABCDE1234F1Z5",
+  "creditLimit": 50000,
+  "rateType": "Variable",
+  "pricePerUnit": 125.75
+}
+```
 
 ---
 

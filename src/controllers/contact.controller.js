@@ -200,6 +200,8 @@ const acceptEnquiry = async (request, reply) => {
       role: 'hotel',
       creditLimit: 0,
       isBlocked: false,
+      rateType: null,
+      pricePerUnit: null,
     });
 
     // Update enquiry status to accepted
