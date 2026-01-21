@@ -3,6 +3,7 @@ const {
   getCategories,
   getProducts,
   getProduct,
+  getProductById,
   getProductsBySubcategory,
 } = require('../../controllers/user/product.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
@@ -63,6 +64,21 @@ const productRoutes = async (fastify, options) => {
     },
     preHandler: [authenticate],
   }, getProductsBySubcategory);
+
+  fastify.get('/products/detail/:id', {
+    schema: {
+      tags: ['user'],
+      summary: 'Get single product by ID',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+    },
+    preHandler: [authenticate],
+  }, getProductById);
 };
 
 module.exports = productRoutes;

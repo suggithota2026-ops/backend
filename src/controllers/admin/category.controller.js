@@ -69,6 +69,8 @@ const createCategory = async (request, reply) => {
 const getCategories = async (request, reply) => {
   try {
     const { isActive } = request.query;
+    const { sequelize } = require('../../config/db');
+
     const query = {};
     if (isActive !== undefined) {
       query.isActive = isActive === true || isActive === 'true';
@@ -76,6 +78,19 @@ const getCategories = async (request, reply) => {
 
     const categories = await Category.findAll({
       where: query,
+      attributes: {
+        include: [
+          [
+            sequelize.literal(`(
+              SELECT COUNT(*)
+              FROM products AS product
+              WHERE
+                product."categoryId" = "Category".id
+            )`),
+            'products'
+          ]
+        ]
+      },
       order: [['displayOrder', 'ASC'], ['createdAt', 'DESC']],
     });
 
@@ -90,12 +105,27 @@ const getCategory = async (request, reply) => {
   try {
     const { id } = request.params;
     const categoryId = parseInt(id);
+    const { sequelize } = require('../../config/db');
 
     if (isNaN(categoryId)) {
       return sendError(reply, 'Invalid category ID', 400);
     }
 
-    const category = await Category.findByPk(categoryId);
+    const category = await Category.findByPk(categoryId, {
+      attributes: {
+        include: [
+          [
+            sequelize.literal(`(
+              SELECT COUNT(*)
+              FROM products AS product
+              WHERE
+                product."categoryId" = "Category".id
+            )`),
+            'products'
+          ]
+        ]
+      }
+    });
 
     if (!category) {
       return sendError(reply, 'Category not found', 404);

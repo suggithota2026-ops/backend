@@ -710,6 +710,33 @@ const getProductsBySubcategory = async (request, reply) => {
   }
 };
 
+const updatePrice = async (request, reply) => {
+  try {
+    const { id } = request.params;
+
+    // Validate ID
+    if (!id || isNaN(parseInt(id))) {
+      return sendError(reply, 'Invalid product ID', 400);
+    }
+
+    const { price } = request.body;
+
+    const product = await Product.findByPk(id);
+    if (!product) {
+      return sendError(reply, 'Product not found', 404);
+    }
+
+    const updateData = { price: parseFloat(price) };
+
+    await product.update(updateData);
+
+    return sendSuccess(reply, product, 'Price updated successfully');
+  } catch (error) {
+    logger.error('Error updating price:', error);
+    return sendError(reply, 'Failed to update price', 500);
+  }
+};
+
 module.exports = {
   createProduct,
   getProducts,
@@ -718,4 +745,5 @@ module.exports = {
   deleteProduct,
   updateStock,
   getProductsBySubcategory,
+  updatePrice,
 };

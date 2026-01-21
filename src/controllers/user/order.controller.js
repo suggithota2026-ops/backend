@@ -56,8 +56,8 @@ const createOrder = async (request, reply) => {
       }
 
       if (!product.isActive || product.status !== 'active') {
-        logger.error(`Product not available: ${productId}, isActive: ${product.isActive}, status: ${product.status}`);
-        return sendError(reply, `Product ${item.product} not available`, 400);
+        logger.error(`Product out of stock: ${productId}, isActive: ${product.isActive}, status: ${product.status}`);
+        return sendError(reply, `Product ${product.name} is currently out of stock`, 400);
       }
 
       if (item.quantity < product.stock) {

@@ -40,8 +40,13 @@ const updateStockSchema = Joi.object({
   stock: Joi.number().min(0).required(),
 });
 
+const updatePriceSchema = Joi.object({
+  price: Joi.number().min(0).required(),
+});
+
 module.exports = {
   createProductSchema,
   updateProductSchema,
   updateStockSchema,
+  updatePriceSchema,
 };

@@ -7,6 +7,7 @@ const {
   deleteProduct,
   updateStock,
   getProductsBySubcategory,
+  updatePrice,
 } = require('../../controllers/admin/product.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/admin.middleware');
@@ -15,6 +16,7 @@ const {
   createProductSchema,
   updateProductSchema,
   updateStockSchema,
+  updatePriceSchema,
 } = require('../../validations/product.validation');
 
 const productRoutes = async (fastify, options) => {
@@ -151,6 +153,46 @@ const productRoutes = async (fastify, options) => {
       }
     },
   }, updateStock);
+
+  fastify.patch('/products/:id/price', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Update product price',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['price'],
+        properties: {
+          price: { type: 'number' },
+        },
+      },
+    },
+    // preHandler: [authenticate, requireAdmin],
+    preValidation: async (request, reply) => {
+      const logger = require('../../utils/logger');
+      if (!request.body) request.body = {};
+      if (request.body.price !== undefined && request.body.price !== null) {
+        if (typeof request.body.price === 'string') {
+          const numValue = parseFloat(request.body.price);
+          if (!isNaN(numValue)) {
+            request.body.price = numValue;
+          } else {
+            return sendValidationError(reply, [{ message: 'Price must be a valid number' }]);
+          }
+        }
+      }
+      const { error } = updatePriceSchema.validate(request.body);
+      if (error) {
+        return sendValidationError(reply, error.details);
+      }
+    },
+  }, updatePrice);
 
   fastify.get('/products/subcategory/:subcategoryId', {
     schema: {

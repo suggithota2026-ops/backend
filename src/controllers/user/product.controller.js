@@ -97,7 +97,7 @@ const getProducts = async (request, reply) => {
 
     const where = {
       isActive: true,
-      status: 'active',
+      status: { [Op.in]: ['active', 'inactive', 'out_of_stock'] },
     };
 
     if (category) {
@@ -152,6 +152,7 @@ const getProducts = async (request, reply) => {
       const p = transformProductImages(product, request);
       return {
         ...p,
+        status: p.status === 'inactive' ? 'out_of_stock' : p.status,
         minQuantity: p.stock,
         name: p.name,
         category: {
@@ -198,7 +199,7 @@ const getProduct = async (request, reply) => {
       where: {
         categoryId: categoryId,
         isActive: true,
-        status: 'active',
+        status: { [Op.in]: ['active', 'inactive', 'out_of_stock'] },
       },
       order: [
         ['displayOrder', 'ASC'],
@@ -236,7 +237,11 @@ const getProduct = async (request, reply) => {
         description: category.description,
         image: categoryImage,
       },
-      products: productsWithImages.map(p => ({ ...p, minQuantity: p.stock })),
+      products: productsWithImages.map(p => ({
+        ...p,
+        status: p.status === 'inactive' ? 'out_of_stock' : p.status, // Map inactive to out_of_stock for user
+        minQuantity: p.stock
+      })),
       count: products.length,
     };
 
@@ -276,7 +281,7 @@ const getProductsBySubcategory = async (request, reply) => {
       where: {
         ...subcategoryWhere,
         isActive: true,
-        status: 'active',
+        status: { [Op.in]: ['active', 'inactive', 'out_of_stock'] },
       },
       order: [
         ['displayOrder', 'ASC'],
@@ -297,6 +302,7 @@ const getProductsBySubcategory = async (request, reply) => {
       const p = transformProductImages(product, request);
       return {
         ...p,
+        status: p.status === 'inactive' ? 'out_of_stock' : p.status,
         minQuantity: p.stock,
         name: p.name,
         category: {
@@ -313,9 +319,51 @@ const getProductsBySubcategory = async (request, reply) => {
   }
 };
 
+const getProductById = async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const productId = parseInt(id);
+
+    if (isNaN(productId)) {
+      return sendError(reply, 'Invalid product ID', 400);
+    }
+
+    const product = await Product.findOne({
+      where: {
+        id: productId,
+        isActive: true,
+        status: { [Op.in]: ['active', 'inactive', 'out_of_stock'] },
+      },
+    });
+
+    if (!product) {
+      return sendError(reply, 'Product not found', 404);
+    }
+
+    // Get category name
+    const category = await Category.findByPk(product.categoryId, {
+      attributes: ['name'],
+    });
+
+    const p = transformProductImages(product, request);
+    const productData = {
+      ...p,
+      status: p.status === 'inactive' ? 'out_of_stock' : p.status, // Map inactive to out_of_stock for user
+      minQuantity: p.stock,
+      category: category ? { name: category.name } : null,
+    };
+
+    return sendSuccess(reply, productData, 'Product retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching product by ID:', error);
+    return sendError(reply, 'Failed to fetch product', 500);
+  }
+};
+
 module.exports = {
   getCategories,
   getProducts,
   getProduct,
+  getProductById,
   getProductsBySubcategory,
 };
