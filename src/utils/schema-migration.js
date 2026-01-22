@@ -39,9 +39,36 @@ const runSchemaMigration = async () => {
         await addColumnIfNotExists('products', 'pricingType', "VARCHAR(50) DEFAULT 'fixed'");
         await addColumnIfNotExists('products', 'createdById', 'INTEGER REFERENCES "admins"("id")');
 
-        // 4. Check Users table (Fix for rateType/pricePerUnit error)
-        await addColumnIfNotExists('users', 'rateType', 'VARCHAR(50)');
-        await addColumnIfNotExists('users', 'pricePerUnit', 'DECIMAL(10, 2)');
+        // 5. Check Orders and Invoices for deliveryCharge
+        await addColumnIfNotExists('orders', 'deliveryCharge', 'DECIMAL(12, 2) DEFAULT 0');
+        await addColumnIfNotExists('invoices', 'deliveryCharge', 'DECIMAL(12, 2) DEFAULT 0');
+
+        // 6. Update paymentMethod enum values
+        try {
+            // Check if cod and credit exist in the enum
+            const enumQuery = `
+                SELECT e.enumlabel
+                FROM pg_enum e
+                JOIN pg_type t ON e.enumtypid = t.oid
+                WHERE t.typname = 'enum_orders_paymentMethod'
+            `;
+            const enumLabels = await sequelize.query(enumQuery, { type: QueryTypes.SELECT });
+            const labels = enumLabels.map(l => l.enumlabel);
+
+            if (!labels.includes('cod')) {
+                logger.info("Adding 'cod' to enum_orders_paymentMethod...");
+                await sequelize.query('ALTER TYPE "enum_orders_paymentMethod" ADD VALUE IF NOT EXISTS \'cod\'');
+            }
+            if (!labels.includes('credit')) {
+                logger.info("Adding 'credit' to enum_orders_paymentMethod...");
+                await sequelize.query('ALTER TYPE "enum_orders_paymentMethod" ADD VALUE IF NOT EXISTS \'credit\'');
+            }
+
+            // Update existing 'cash' to 'cod'
+            await sequelize.query(`UPDATE orders SET "paymentMethod" = 'cod' WHERE "paymentMethod" = 'cash'`);
+        } catch (err) {
+            logger.error('Failed to update paymentMethod enum:', err.message);
+        }
 
         logger.info('Schema migration check completed.');
     } catch (error) {
