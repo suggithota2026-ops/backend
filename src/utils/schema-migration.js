@@ -39,6 +39,52 @@ const runSchemaMigration = async () => {
         await addColumnIfNotExists('products', 'pricingType', "VARCHAR(50) DEFAULT 'fixed'");
         await addColumnIfNotExists('products', 'createdById', 'INTEGER REFERENCES "admins"("id")');
 
+        // 4. Update stock and minStockLevel column types to DECIMAL
+        try {
+            // Check current column type
+            const stockTypeQuery = `
+                SELECT data_type, column_default
+                FROM information_schema.columns
+                WHERE table_name = 'products' AND column_name = 'stock'
+            `;
+            const [stockColumn] = await sequelize.query(stockTypeQuery, { type: QueryTypes.SELECT });
+            
+            if (stockColumn && stockColumn.data_type !== 'numeric') {  // numeric is the underlying type for DECIMAL
+                logger.info('Altering stock column to DECIMAL type...');
+                await sequelize.query(`
+                    ALTER TABLE "products" 
+                    ALTER COLUMN "stock" TYPE DECIMAL(10,2) 
+                    USING CASE 
+                        WHEN "stock" IS NULL THEN 0 
+                        ELSE "stock"::NUMERIC 
+                    END
+                `);
+                logger.info('Stock column altered to DECIMAL successfully.');
+            }
+            
+            const minStockTypeQuery = `
+                SELECT data_type, column_default
+                FROM information_schema.columns
+                WHERE table_name = 'products' AND column_name = 'minStockLevel'
+            `;
+            const [minStockColumn] = await sequelize.query(minStockTypeQuery, { type: QueryTypes.SELECT });
+            
+            if (minStockColumn && minStockColumn.data_type !== 'numeric') {  // numeric is the underlying type for DECIMAL
+                logger.info('Altering minStockLevel column to DECIMAL type...');
+                await sequelize.query(`
+                    ALTER TABLE "products" 
+                    ALTER COLUMN "minStockLevel" TYPE DECIMAL(10,2) 
+                    USING CASE 
+                        WHEN "minStockLevel" IS NULL THEN 0 
+                        ELSE "minStockLevel"::NUMERIC 
+                    END
+                `);
+                logger.info('minStockLevel column altered to DECIMAL successfully.');
+            }
+        } catch (err) {
+            logger.error('Failed to alter stock/minStockLevel columns to DECIMAL:', err.message);
+        }
+
         // 5. Check Orders and Invoices for deliveryCharge
         await addColumnIfNotExists('orders', 'deliveryCharge', 'DECIMAL(12, 2) DEFAULT 0');
         await addColumnIfNotExists('invoices', 'deliveryCharge', 'DECIMAL(12, 2) DEFAULT 0');
