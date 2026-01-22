@@ -25,7 +25,11 @@ const getOrders = async (request, reply) => {
     if (startDate || endDate) {
       where.createdAt = {};
       if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-      if (endDate) where.createdAt[Op.lte] = new Date(endDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt[Op.lte] = end;
+      }
     }
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
