@@ -27,6 +27,10 @@ const Order = sequelize.define('Order', {
     type: DataTypes.DECIMAL(12, 2),
     allowNull: false,
   },
+  deliveryCharge: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0,
+  },
   gstAmount: {
     type: DataTypes.DECIMAL(12, 2),
     defaultValue: 0,
@@ -45,7 +49,7 @@ const Order = sequelize.define('Order', {
   },
   paymentMethod: {
     type: DataTypes.ENUM(...Object.values(PAYMENT_METHOD)),
-    defaultValue: PAYMENT_METHOD.CASH,
+    defaultValue: PAYMENT_METHOD.COD,
   },
   paymentStatus: {
     type: DataTypes.ENUM('pending', 'paid'),

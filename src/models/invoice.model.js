@@ -26,6 +26,10 @@ const Invoice = sequelize.define('Invoice', {
     type: DataTypes.DECIMAL(12, 2),
     allowNull: false,
   },
+  deliveryCharge: {
+    type: DataTypes.DECIMAL(12, 2),
+    defaultValue: 0,
+  },
   gstAmount: {
     type: DataTypes.DECIMAL(12, 2),
     defaultValue: 0,

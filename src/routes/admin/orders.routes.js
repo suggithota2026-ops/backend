@@ -60,10 +60,11 @@ const orderRoutes = async (fastify, options) => {
       },
       body: {
         type: 'object',
-        required: ['status'],
         properties: {
           status: { type: 'string' },
           assignedTo: { type: 'string' },
+          deliveryCharge: { type: 'number' },
+          paymentMethod: { type: 'string' },
         },
       },
     },
@@ -90,7 +91,7 @@ const orderRoutes = async (fastify, options) => {
     },
     // preHandler: [authenticate, requireAdmin],
   }, generateOrderInvoice);
-  
+
   fastify.get('/orders/today/summary', {
     schema: {
       tags: ['admin'],

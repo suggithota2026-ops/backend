@@ -23,17 +23,17 @@ const generateInvoicePDF = (invoice, order, hotel) => {
       // Header with logos
       const logoPath = path.join(__dirname, '../../uploads/image.png');
       const logoPath1 = path.join(__dirname, '../../uploads/image1.png');
-      
+
       // Check if first logo exists and add it to the PDF
       if (fs.existsSync(logoPath)) {
         try {
           doc.image(logoPath, 50, 50, { width: 100 });
-          
+
           // Add second logo if it exists
           if (fs.existsSync(logoPath1)) {
             doc.image(logoPath1, 400, 50, { width: 100 });
           }
-          
+
           doc.moveDown(2);
         } catch (error) {
           // If there's an error loading the logo, fall back to text
@@ -63,6 +63,7 @@ const generateInvoicePDF = (invoice, order, hotel) => {
       doc.text(`Invoice Number: ${invoice.invoiceNumber}`, 50, 120);
       doc.text(`Date: ${formatDate(invoice.createdAt, 'YYYY-MM-DD')}`, 50, 135);
       doc.text(`Order ID: ${order.orderNumber}`, 50, 150);
+      doc.text(`Remarks: ${order.specialInstructions || 'N/A'}`, 50, 165);
 
       // Hotel details
       doc.text('Bill To:', 350, 120);
@@ -108,15 +109,20 @@ const generateInvoicePDF = (invoice, order, hotel) => {
       doc.text(`Subtotal: ₹${parseFloat(invoice.subtotal).toFixed(2)}`, 350, yPosition);
       yPosition += 15;
 
+      if (parseFloat(invoice.deliveryCharge) > 0) {
+        doc.text(`Delivery Charge: ₹${parseFloat(invoice.deliveryCharge).toFixed(2)}`, 350, yPosition);
+        yPosition += 15;
+      }
+
       if (parseFloat(invoice.gstAmount) > 0) {
         doc.text(`GST (${invoice.gstRate}%): ₹${parseFloat(invoice.gstAmount).toFixed(2)}`, 350, yPosition);
         yPosition += 15;
       }
 
-      doc.fontSize(12).text(`Total: ₹${parseFloat(invoice.totalAmount).toFixed(2)}`, 350, yPosition, { align: 'right' });
+      doc.fontSize(12).text(`Total: ₹${parseFloat(invoice.totalAmount).toFixed(2)}`, 350, yPosition);
 
       // Footer
-      doc.fontSize(8).text('Payment Method: Cash on Delivery', 50, 700);
+      doc.fontSize(8).text(`Payment Method: ${(order.paymentMethod || 'cod').toUpperCase()}`, 50, 700);
       doc.text('Thank you for your business!', 50, 720, { align: 'center' });
 
       doc.end();

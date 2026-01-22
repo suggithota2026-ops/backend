@@ -65,11 +65,11 @@ const getOrder = async (request, reply) => {
   try {
     const { id } = request.params;
     const orderId = parseInt(id);
-    
+
     if (isNaN(orderId)) {
       return sendError(reply, 'Invalid order ID', 400);
     }
-    
+
     const order = await Order.findByPk(orderId, {
       include: [{
         model: User,
@@ -78,7 +78,7 @@ const getOrder = async (request, reply) => {
         required: false,
       }],
     });
-    
+
     if (!order) {
       return sendError(reply, 'Order not found', 404);
     }
@@ -93,9 +93,9 @@ const getOrder = async (request, reply) => {
 const updateOrderStatus = async (request, reply) => {
   try {
     const { id } = request.params;
-    const { status, assignedTo } = request.body;
+    const { status, assignedTo, deliveryCharge, paymentMethod } = request.body;
     const orderId = parseInt(id);
-    
+
     if (isNaN(orderId)) {
       return sendError(reply, 'Invalid order ID', 400);
     }
@@ -107,19 +107,28 @@ const updateOrderStatus = async (request, reply) => {
         required: false,
       }],
     });
-    
+
     if (!order) {
       return sendError(reply, 'Order not found', 404);
     }
 
     const oldStatus = order.status;
-    const updateData = { status };
+    const updateData = {};
+    if (status) updateData.status = status;
     if (assignedTo) {
       updateData.assignedTo = assignedTo;
     }
+    if (deliveryCharge !== undefined) {
+      updateData.deliveryCharge = parseFloat(deliveryCharge);
+      // Recalculate totalAmount: subtotal + new deliveryCharge
+      updateData.totalAmount = parseFloat(order.subtotal) + updateData.deliveryCharge;
+    }
+    if (paymentMethod) {
+      updateData.paymentMethod = paymentMethod;
+    }
 
     await order.update(updateData);
-    
+
     // Reload order to get updated data
     await order.reload({
       include: [{
@@ -163,11 +172,11 @@ const generateOrderInvoice = async (request, reply) => {
 const getTodaysOrdersSummary = async (request, reply) => {
   try {
     const { getStartOfDay, getEndOfDay } = require('../../utils/date');
-    
+
     // Get today's date range
     const startOfDay = getStartOfDay();
     const endOfDay = getEndOfDay();
-    
+
     // Fetch today's orders with hotel and items information
     const orders = await Order.findAll({
       where: {
@@ -186,22 +195,22 @@ const getTodaysOrdersSummary = async (request, reply) => {
       ],
       order: [['createdAt', 'ASC']]
     });
-    
+
     // Process orders to create client-wise item summary
     const itemSummary = {};
-    
+
     orders.forEach(order => {
       const clientName = order.hotel.hotelName || `Hotel #${order.hotelId}`;
-      
+
       // Process each item in the order
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach(item => {
           const itemName = item.productName || item.name || 'Unknown Item';
           const quantity = parseFloat(item.quantity) || 0;
-          
+
           // Create unique key for item-client combination
           const itemKey = `${itemName}`;
-          
+
           if (!itemSummary[itemKey]) {
             itemSummary[itemKey] = {
               itemName: itemName,
@@ -209,21 +218,21 @@ const getTodaysOrdersSummary = async (request, reply) => {
               totalQuantity: 0
             };
           }
-          
+
           // Add client entry if not exists
           if (!itemSummary[itemKey].clients[clientName]) {
             itemSummary[itemKey].clients[clientName] = 0;
           }
-          
+
           // Add quantity to client
           itemSummary[itemKey].clients[clientName] += quantity;
-          
+
           // Add to total quantity
           itemSummary[itemKey].totalQuantity += quantity;
         });
       }
     });
-    
+
     // Convert to array format for easier frontend processing
     const summaryArray = Object.entries(itemSummary).map(([itemName, data]) => ({
       itemName: data.itemName,
@@ -233,16 +242,16 @@ const getTodaysOrdersSummary = async (request, reply) => {
       })),
       totalQuantity: data.totalQuantity
     }));
-    
+
     // Sort by item name
     summaryArray.sort((a, b) => a.itemName.localeCompare(b.itemName));
-    
+
     return sendSuccess(reply, {
       date: new Date().toISOString().split('T')[0],
       totalOrders: orders.length,
       summary: summaryArray
     }, 'Today\'s orders summary retrieved successfully');
-    
+
   } catch (error) {
     logger.error('Error fetching today\'s orders summary:', error);
     return sendError(reply, 'Failed to fetch today\'s orders summary', 500);

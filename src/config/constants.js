@@ -35,7 +35,8 @@ module.exports = {
   },
 
   PAYMENT_METHOD: {
-    CASH: 'cash',
+    COD: 'cod',
+    CREDIT: 'credit',
     OFFLINE: 'offline',
   },
 

@@ -27,16 +27,18 @@ const generateInvoice = async (orderId) => {
     }
 
     // Calculate GST if hotel has GST number
-    const gstRate = order.hotel.gstNumber ? 18 : 0; // 18% GST
+    const gstRate = order.hotel && order.hotel.gstNumber ? 18 : 0; // 18% GST
     const subtotal = parseFloat(order.subtotal);
+    const deliveryCharge = parseFloat(order.deliveryCharge || 0);
     const gstAmount = (subtotal * gstRate) / 100;
-    const totalAmount = subtotal + gstAmount;
+    const totalAmount = subtotal + deliveryCharge + gstAmount;
 
     // Create invoice
     invoice = await Invoice.create({
       orderId,
       hotelId: order.hotelId,
       subtotal,
+      deliveryCharge,
       gstAmount,
       gstRate,
       totalAmount,

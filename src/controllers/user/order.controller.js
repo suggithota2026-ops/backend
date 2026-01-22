@@ -84,11 +84,14 @@ const createOrder = async (request, reply) => {
     }
 
     // Create order
+    const deliveryCharge = subtotal < 299 ? 40 : 0;
+
     const order = await Order.create({
       hotelId: finalHotelId,
       items: orderItems,
       subtotal,
-      totalAmount: subtotal, // GST will be calculated in invoice
+      deliveryCharge,
+      totalAmount: subtotal + deliveryCharge, // GST will be calculated in invoice
       specialInstructions,
       deliveryTime: deliveryTime ? new Date(deliveryTime) : undefined,
       status: ORDER_STATUS.PENDING,
