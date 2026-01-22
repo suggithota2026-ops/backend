@@ -45,11 +45,11 @@ const Product = sequelize.define('Product', {
     defaultValue: 'kg',
   },
   stock: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
   },
   minStockLevel: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.DECIMAL(10, 2),
     defaultValue: 0,
   },
   status: {

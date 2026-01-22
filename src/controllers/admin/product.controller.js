@@ -205,8 +205,8 @@ const createProduct = async (request, reply) => {
 
     // Convert price and stock to numbers
     if (productData.price) productData.price = parseFloat(productData.price);
-    if (productData.stock) productData.stock = parseInt(productData.stock);
-    if (productData.minStockLevel) productData.minStockLevel = parseInt(productData.minStockLevel);
+    if (productData.stock) productData.stock = parseFloat(productData.stock);
+    if (productData.minStockLevel) productData.minStockLevel = parseFloat(productData.minStockLevel);
     if (productData.displayOrder) productData.displayOrder = parseInt(productData.displayOrder);
     if (productData.isActive !== undefined) productData.isActive = productData.isActive === 'true' || productData.isActive === true;
 
@@ -444,10 +444,10 @@ const updateProduct = async (request, reply) => {
         updateData.price = parseFloat(updateData.price);
       }
       if (updateData.stock && typeof updateData.stock === 'string') {
-        updateData.stock = parseInt(updateData.stock);
+        updateData.stock = parseFloat(updateData.stock);
       }
       if (updateData.minStockLevel && typeof updateData.minStockLevel === 'string') {
-        updateData.minStockLevel = parseInt(updateData.minStockLevel);
+        updateData.minStockLevel = parseFloat(updateData.minStockLevel);
       }
       if (updateData.displayOrder && typeof updateData.displayOrder === 'string') {
         updateData.displayOrder = parseInt(updateData.displayOrder);
@@ -542,8 +542,8 @@ const updateProduct = async (request, reply) => {
 
     // Convert numeric fields
     if (updateData.price) updateData.price = parseFloat(updateData.price);
-    if (updateData.stock) updateData.stock = parseInt(updateData.stock);
-    if (updateData.minStockLevel) updateData.minStockLevel = parseInt(updateData.minStockLevel);
+    if (updateData.stock) updateData.stock = parseFloat(updateData.stock);
+    if (updateData.minStockLevel) updateData.minStockLevel = parseFloat(updateData.minStockLevel);
     if (updateData.displayOrder) updateData.displayOrder = parseInt(updateData.displayOrder);
     if (updateData.isActive !== undefined) updateData.isActive = updateData.isActive === 'true' || updateData.isActive === true;
 
