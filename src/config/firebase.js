@@ -13,13 +13,13 @@ let analytics = null;
 
 // Firebase Client SDK Configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDJ0Jc5Vl9gxkhQM-vKsyl6Acep-EDirtk",
-  authDomain: "prk-smiles.firebaseapp.com",
-  projectId: "prk-smiles",
-  storageBucket: "prk-smiles.firebasestorage.app",
-  messagingSenderId: "96495423870",
-  appId: "1:96495423870:web:c5ae43caf8a9b4681e232f",
-  measurementId: "G-EL5LME26LR"
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID,
+  measurementId: process.env.FIREBASE_MEASUREMENT_ID
 };
 
 const initializeFirebaseClient = () => {

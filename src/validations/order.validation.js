@@ -7,7 +7,7 @@ const createOrderSchema = Joi.object({
     .items(
       Joi.object({
         product: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
-        quantity: Joi.number().min(1).required(),
+        quantity: Joi.number().min(0.01).required(),
       })
     )
     .min(1)
@@ -34,7 +34,7 @@ const reorderSchema = Joi.object({
     .items(
       Joi.object({
         product: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
-        quantity: Joi.number().min(1).required(),
+        quantity: Joi.number().min(0.01).required(),
       }).unknown(true)
     )
     .optional(),
