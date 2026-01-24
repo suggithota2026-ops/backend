@@ -1,5 +1,5 @@
 // Migration script to change imageUrl column from VARCHAR to TEXT
-const { sequelize } = require('../src/config/db');
+const { sequelize } = require('../../src/config/db');
 
 async function migrateImageUrlColumn() {
   try {

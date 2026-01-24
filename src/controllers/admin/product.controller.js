@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { UPLOAD_DIR, MAX_FILE_SIZE } = require('../../config/env');
+const cloudinaryService = require('../../services/cloudinary.service');
 
 // Inline file upload functions (workaround for file service issues)
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
@@ -53,55 +54,57 @@ const saveFile = async (part, subDir = '') => {
     if (!validation.isValid) {
       throw new Error(validation.error);
     }
-    const uploadPath = ensureUploadDir(subDir);
-    const originalFilename = part.filename || 'image';
-    const fileName = generateUniqueFileName(originalFilename);
-    const filePath = path.join(uploadPath, fileName);
 
-    if (fs.existsSync(filePath)) {
-      const randomHash = crypto.randomBytes(8).toString('hex');
-      const ext = path.extname(fileName);
-      const baseName = path.basename(fileName, ext);
-      const newFileName = `${baseName}_${randomHash}${ext}`;
-      const newFilePath = path.join(uploadPath, newFileName);
-      if (fs.existsSync(newFilePath)) {
-        throw new Error('Unable to generate unique filename. Please try again.');
-      }
-      const relativePath = path.join(subDir, newFileName).replace(/\\/g, '/');
-      const buffer = await part.toBuffer();
-      if (buffer.length > MAX_FILE_SIZE) {
-        throw new Error(`File size (${(buffer.length / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size of ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(2)}MB`);
-      }
-      fs.writeFileSync(newFilePath, buffer);
-      logger.info(`File saved: ${relativePath} (${(buffer.length / 1024).toFixed(2)}KB)`);
-      return relativePath;
-    }
-
-    const buffer = await part.toBuffer();
+    const buffer = await part.toBuffer();  
     if (buffer.length > MAX_FILE_SIZE) {
       throw new Error(`File size (${(buffer.length / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size of ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(2)}MB`);
     }
-    fs.writeFileSync(filePath, buffer);
-    const relativePath = path.join(subDir, fileName).replace(/\\/g, '/');
-    logger.info(`File saved: ${relativePath} (${(buffer.length / 1024).toFixed(2)}KB)`);
-    return relativePath;
+
+    const uploadResult = await cloudinaryService.uploadImage(buffer, {
+      folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER || 'ecommerce'}/${subDir || 'products'}`,
+      quality: 'auto:good',
+      format: 'auto'
+    });
+
+    logger.info(`File uploaded to Cloudinary: ${uploadResult.publicId} (${(buffer.length / 1024).toFixed(2)}KB)`);
+    return uploadResult.url; // Return the Cloudinary URL
   } catch (error) {
-    logger.error('Error saving file:', error);
+    logger.error('Error uploading file to Cloudinary:', error);
     throw error;
   }
 };
 
-const deleteFile = (filePath) => {
+const deleteFile = async (fileUrl) => {
   try {
-    const fullPath = path.join(__dirname, '../../../', UPLOAD_DIR, filePath);
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
-      logger.info(`File deleted: ${filePath}`);
-      return true;
+    if (!fileUrl || typeof fileUrl !== 'string') return false;
+    
+    // Extract public ID from Cloudinary URL
+    const urlParts = fileUrl.split('/');
+    const fileName = urlParts[urlParts.length - 1];
+    const publicId = fileName.split('.')[0]; // Remove extension
+    
+    // Extract folder path from URL
+    const folderMatch = fileUrl.match(/\/upload\/[^\/]+\/([^\/]+)\/([^\/]+)/);
+    if (folderMatch) {
+      const folder = folderMatch[1];
+      const fileNameWithoutExt = folderMatch[2].split('.')[0];
+      const fullPublicId = `${folder}/${fileNameWithoutExt}`;
+      
+      const result = await cloudinaryService.deleteFile(fullPublicId);
+      logger.info(`File deleted from Cloudinary: ${fullPublicId}`);
+      return result.success;
     }
-    return false;
+    
+    // Fallback: try to extract public ID from the end of the URL
+    const parts = fileUrl.split('/');
+    const lastPart = parts[parts.length - 1];
+    const publicIdFromUrl = lastPart.split('.')[0];
+    
+    const result = await cloudinaryService.deleteFile(publicIdFromUrl);
+    logger.info(`File deleted from Cloudinary: ${publicIdFromUrl}`);
+    return result.success;
   } catch (error) {
-    logger.error('Error deleting file:', error);
+    logger.error('Error deleting file from Cloudinary:', error);
     return false;
   }
 };
@@ -118,14 +121,17 @@ const transformProductImages = (product, request) => {
   if (p.images && Array.isArray(p.images)) {
     p.images = p.images.map(img => {
       if (typeof img === 'string' && img) {
-        // If it's already a full URL, return as is
+        // If it's already a full URL (from Cloudinary), return as is
         if (img.startsWith('http://') || img.startsWith('https://')) {
           return img;
         }
-        // The frontend's getImageUrl function expects paths like 'products/filename.jpg'
-        // which it will convert to '/uploads/products/filename.jpg'
-        // So we just need to return the path as stored in DB: 'products/filename.jpg'
-        return img;
+        // If it already starts with /uploads/, return as is (avoid double prefix)
+        if (img.startsWith('/uploads/')) {
+          return img;
+        }
+        // If it's a local path, convert to full URL
+        // The frontend's getImageUrl function will handle both Cloudinary URLs and local paths
+        return `/uploads/${img.replace(/\\/g, '/')}`;
       }
       return img;
     });
@@ -352,21 +358,9 @@ const getProduct = async (request, reply) => {
 
     const productData = product.toJSON();
 
-    // Transform image paths to full URLs
-    if (productData.images && Array.isArray(productData.images)) {
-      productData.images = productData.images.map(img => {
-        if (typeof img === 'string' && img) {
-          // If it's already a full URL, return as is
-          if (img.startsWith('http://') || img.startsWith('https://')) {
-            return img;
-          }
-          // Convert relative path to URL path
-          const imagePath = img.startsWith('/uploads/') ? img : `/uploads/${img.replace(/\\/g, '/')}`;
-          return imagePath;
-        }
-        return img;
-      });
-    }
+    // Transform image paths to full URLs using shared function
+    const transformedProduct = transformProductImages({ toJSON: () => productData }, request);
+    productData.images = transformedProduct.images;
 
     const productWithCategory = {
       ...productData,
@@ -483,14 +477,14 @@ const updateProduct = async (request, reply) => {
 
     // Handle new image uploads - replace existing images if new ones are uploaded
     if (newImagePaths.length > 0) {
-      // Delete old images from filesystem
+      // Delete old images from Cloudinary
       const existingImages = product.images || [];
       if (Array.isArray(existingImages) && existingImages.length > 0) {
-        existingImages.forEach(oldImagePath => {
+        for (const oldImagePath of existingImages) {
           if (oldImagePath && typeof oldImagePath === 'string') {
-            deleteFile(oldImagePath);
+            await deleteFile(oldImagePath);
           }
-        });
+        }
       }
       // Replace with new images
       updateData.images = newImagePaths;
@@ -587,10 +581,10 @@ const deleteProduct = async (request, reply) => {
       return sendError(reply, 'Product not found', 404);
     }
 
-    // Delete associated images
+    // Delete associated images from Cloudinary
     if (product.images && product.images.length > 0) {
       for (const imagePath of product.images) {
-        deleteFile(imagePath);
+        await deleteFile(imagePath);
       }
     }
 
