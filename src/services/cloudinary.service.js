@@ -16,7 +16,6 @@ cloudinary.config({
 
 class CloudinaryService {
   constructor() {
-    this.upload = promisify(cloudinary.uploader.upload);
     this.destroy = promisify(cloudinary.uploader.destroy);
   }
 
@@ -28,39 +27,81 @@ class CloudinaryService {
    */
   async uploadFile(file, options = {}) {
     try {
+      // Prepare default options but exclude any problematic transformations from options
+      const { transformation: incomingTransformation, ...otherOptions } = options;
+      
       const defaultOptions = {
         folder: process.env.CLOUDINARY_UPLOAD_FOLDER || 'uploads',
         resource_type: 'auto', // Automatically detect file type
         use_filename: true,
         unique_filename: true,
         overwrite: false,
-        // Image optimization
+        // Image optimization - removed fetch_format: 'auto' as it causes issues with data URLs
         transformation: [
           {
-            quality: 'auto:good', // Auto quality optimization
-            fetch_format: 'auto'  // Auto format conversion (WebP for modern browsers)
+            quality: 'auto:good' // Auto quality optimization
           }
         ],
         // Security
         invalidate: true,
-        ...options
+        ...otherOptions
       };
+      
+      // If there are incoming transformations, merge them but remove fetch_format
+      if (incomingTransformation && Array.isArray(incomingTransformation)) {
+        defaultOptions.transformation = defaultOptions.transformation.concat(
+          incomingTransformation.map(t => {
+            const { fetch_format, ...safeTransform } = t; // Remove fetch_format
+            return safeTransform;
+          })
+        );
+      }
 
-      const result = await this.upload(file, defaultOptions);
-      
-      logger.info(`File uploaded successfully: ${result.public_id}`);
-      
-      return {
-        success: true,
-        url: result.secure_url,
-        publicId: result.public_id,
-        originalFilename: result.original_filename,
-        format: result.format,
-        width: result.width,
-        height: result.height,
-        bytes: result.bytes,
-        resourceType: result.resource_type
-      };
+      // Handle both file path strings and Buffer objects
+      return new Promise((resolve, reject) => {
+        let uploadSource = file;
+        
+        if (Buffer.isBuffer(file)) {
+          // For buffer objects, convert to data URL format with proper MIME type detection
+          const base64 = file.toString('base64');
+          
+          // Try to detect MIME type from buffer
+          let mimeType = 'application/octet-stream';
+          
+          // Check for common image signatures
+          if (file.slice(0, 4).toString('hex').startsWith('ffd8')) {
+            mimeType = 'image/jpeg';
+          } else if (file.slice(0, 4).toString('hex').startsWith('8950')) {
+            mimeType = 'image/png';
+          } else if (file.slice(0, 4).toString('hex').startsWith('4749')) {
+            mimeType = 'image/gif';
+          } else if (file.slice(0, 4).toString('hex').startsWith('5249')) {
+            mimeType = 'image/webp';
+          }
+          
+          uploadSource = `data:${mimeType};base64,${base64}`;
+        }
+        
+        cloudinary.uploader.upload(uploadSource, defaultOptions, (error, result) => {
+          if (error) {
+            logger.error('Cloudinary upload error:', error);
+            reject(new Error(`Upload failed: ${error.message}`));
+          } else {
+            logger.info(`File uploaded successfully: ${result.public_id}`);
+            resolve({
+              success: true,
+              url: result.secure_url,
+              publicId: result.public_id,
+              originalFilename: result.original_filename,
+              format: result.format,
+              width: result.width,
+              height: result.height,
+              bytes: result.bytes,
+              resourceType: result.resource_type
+            });
+          }
+        });
+      });
     } catch (error) {
       logger.error('Cloudinary upload error:', error);
       throw new Error(`Upload failed: ${error.message}`);
@@ -74,12 +115,12 @@ class CloudinaryService {
    * @returns {Promise<Object>} Upload result
    */
   async uploadImage(image, options = {}) {
+    // Create options without fetch_format to avoid issues with data URLs
     const imageOptions = {
       resource_type: 'image',
       transformation: [
         {
           quality: options.quality || 'auto:good',
-          fetch_format: options.format || 'auto',
           crop: options.crop || 'limit',
           width: options.width || 1920,
           height: options.height || 1080
@@ -136,7 +177,15 @@ class CloudinaryService {
    */
   async deleteFile(publicId) {
     try {
-      const result = await this.destroy(publicId);
+      const result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.destroy(publicId, (error, result) => {
+          if (error) {
+            reject(new Error(`Delete failed: ${error.message}`));
+          } else {
+            resolve(result);
+          }
+        });
+      });
       
       if (result.result === 'ok') {
         logger.info(`File deleted successfully: ${publicId}`);
@@ -159,7 +208,6 @@ class CloudinaryService {
   generateImageUrl(publicId, transformations = {}) {
     const defaultTransformations = {
       quality: 'auto:good',
-      fetch_format: 'auto',
       ...transformations
     };
 
@@ -223,8 +271,12 @@ class CloudinaryService {
    * @returns {Object} Validation result
    */
   validateFile(file, allowedTypes = ['image/jpeg', 'image/png', 'image/webp'], maxSize = 5 * 1024 * 1024) {
+    // Handle both Multer and Fastify multipart file objects
+    let mimetype = file.mimetype || file.type;
+    let fileSize = file.size || (file.file && file.file.bytes ? file.file.bytes : 0);
+    
     // Check file type
-    if (!allowedTypes.includes(file.mimetype)) {
+    if (!allowedTypes.includes(mimetype)) {
       return {
         isValid: false,
         error: `Invalid file type. Allowed types: ${allowedTypes.join(', ')}`
@@ -232,7 +284,7 @@ class CloudinaryService {
     }
 
     // Check file size
-    if (file.size > maxSize) {
+    if (fileSize > maxSize) {
       return {
         isValid: false,
         error: `File too large. Maximum size: ${maxSize / (1024 * 1024)}MB`

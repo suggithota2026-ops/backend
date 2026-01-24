@@ -1,10 +1,10 @@
 // Migration script to migrate existing product images from local storage to Cloudinary
 const path = require('path');
 const fs = require('fs');
-const { sequelize } = require('../../src/config/db');
-const Product = require('../../src/models/product.model');
-const cloudinaryService = require('../../src/services/cloudinary.service');
-const logger = require('../../src/utils/logger');
+const { sequelize } = require('../src/config/db');
+const Product = require('../src/models/product.model');
+const cloudinaryService = require('../src/services/cloudinary.service');
+const logger = require('../src/utils/logger');
 
 /**
  * Migrate a single image file to Cloudinary
@@ -27,8 +27,8 @@ async function migrateImageToCloudinary(localImagePath) {
     // Upload to Cloudinary
     const uploadResult = await cloudinaryService.uploadImage(fileBuffer, {
       folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER || 'ecommerce'}/products`,
-      quality: 'auto:good',
-      format: 'auto'
+      quality: 'auto:good'
+      // Removed format: 'auto' to avoid transformation issues
     });
     
     logger.info(`Successfully migrated image to Cloudinary: ${localImagePath} -> ${uploadResult.url}`);

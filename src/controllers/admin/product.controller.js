@@ -62,8 +62,8 @@ const saveFile = async (part, subDir = '') => {
 
     const uploadResult = await cloudinaryService.uploadImage(buffer, {
       folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER || 'ecommerce'}/${subDir || 'products'}`,
-      quality: 'auto:good',
-      format: 'auto'
+      quality: 'auto:good'
+      // Removed format: 'auto' to avoid transformation issues
     });
 
     logger.info(`File uploaded to Cloudinary: ${uploadResult.publicId} (${(buffer.length / 1024).toFixed(2)}KB)`);

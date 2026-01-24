@@ -93,6 +93,23 @@ const initializeFirebaseAdmin = () => {
       return firebaseAdminApp;
     }
 
+    // Try to initialize using service account file path first
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      const serviceAccountPath = require('path').join(__dirname, '..', '..', process.env.GOOGLE_APPLICATION_CREDENTIALS);
+      
+      if (require('fs').existsSync(serviceAccountPath)) {
+        const serviceAccount = require(serviceAccountPath);
+        firebaseAdminApp = admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+          databaseURL: FIREBASE_DATABASE_URL,
+        }, 'admin');
+        
+        logger.info('Firebase Admin SDK initialized with service account file');
+        return firebaseAdminApp;
+      }
+    }
+    
+    // Fallback to service account JSON in environment variable
     if (!FIREBASE_SERVICE_ACCOUNT) {
       logger.warn('Firebase service account not configured. Admin SDK will be disabled.');
       return null;
