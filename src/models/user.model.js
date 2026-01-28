@@ -71,4 +71,10 @@ const User = sequelize.define('User', {
   timestamps: true,
 });
 
+// Add association for customer product pricing
+User.hasMany(require('./customer.product.pricing.model'), {
+  foreignKey: 'customerId',
+  as: 'customerProductPricing'
+});
+
 module.exports = User;

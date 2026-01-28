@@ -13,8 +13,17 @@ const createHotelSchema = Joi.object({
     .optional()
     .allow(''),
   creditLimit: Joi.number().min(0).default(0),
-  rateType: Joi.string().trim().max(50).optional(),
+  rateType: Joi.string().trim().valid('Dairy Prize', 'Weekly Fixes', 'Fixed Price', 'Daily Price', 'Weekly Price').optional(),
   pricePerUnit: Joi.number().min(0).optional(),
+  contractDuration: Joi.string().valid('6 Months', '1 Year').optional(),
+  customerProductPricing: Joi.array().items(
+    Joi.object({
+      productId: Joi.number().integer().positive().required(),
+      fixedPrice: Joi.number().positive().required()
+    })
+  ).optional(),
+  contractStartDate: Joi.date().iso().optional(),
+  contractEndDate: Joi.date().iso().optional(),
 });
 
 const updateHotelSchema = Joi.object({
@@ -27,8 +36,17 @@ const updateHotelSchema = Joi.object({
     .allow(''),
   creditLimit: Joi.number().min(0).optional(),
   isBlocked: Joi.boolean().optional(),
-  rateType: Joi.string().trim().max(50).optional(),
+  rateType: Joi.string().trim().valid('Dairy Prize', 'Weekly Fixes', 'Fixed Price', 'Daily Price', 'Weekly Price').optional(),
   pricePerUnit: Joi.number().min(0).optional(),
+  contractDuration: Joi.string().valid('6 Months', '1 Year').optional(),
+  customerProductPricing: Joi.array().items(
+    Joi.object({
+      productId: Joi.number().integer().positive().required(),
+      fixedPrice: Joi.number().positive().required()
+    })
+  ).optional(),
+  contractStartDate: Joi.date().iso().optional(),
+  contractEndDate: Joi.date().iso().optional(),
 }).unknown(true);
 
 module.exports = {

@@ -38,9 +38,18 @@ const createOrder = async (request, reply) => {
       finalHotelId = parseInt(userId);
     }
 
+    // Get the user to check their rate type
+    const user = await User.findByPk(finalHotelId);
+    if (!user) {
+      return sendError(reply, 'User not found', 404);
+    }
+
     // Validate and fetch products
     const orderItems = [];
     let subtotal = 0;
+
+    // Import the function to get customer-specific pricing
+    const { getActiveCustomerPricing } = require('../../controllers/admin/hotel.controller');
 
     for (const item of items) {
       const productId = parseInt(item.product);
@@ -66,7 +75,22 @@ const createOrder = async (request, reply) => {
         return sendError(reply, `Minimum order quantity for ${product.name} is ${product.stock} ${product.unit || 'units'}.`, 400);
       }
 
-      const unitPrice = parseFloat(product.price);
+      // Determine the price to use based on customer's rate type
+      let unitPrice;
+      if (user.rateType === 'Fixed Price') {
+        // Check if customer has specific pricing for this product
+        const customerSpecificPrice = await getActiveCustomerPricing(finalHotelId, productId);
+        if (customerSpecificPrice) {
+          unitPrice = parseFloat(customerSpecificPrice);
+        } else {
+          // Fall back to standard price if no specific pricing
+          unitPrice = parseFloat(product.price);
+        }
+      } else {
+        // For other rate types, use standard price
+        unitPrice = parseFloat(product.price);
+      }
+
       const totalPrice = unitPrice * item.quantity;
       subtotal += totalPrice;
 

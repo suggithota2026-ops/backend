@@ -20,14 +20,13 @@ const sequelizeOptions = {
 };
 
 // Add SSL for production if needed (required by Render/Heroku/AWS RDS)
-if (NODE_ENV === 'production') {
-  sequelizeOptions.dialectOptions = {
-    ssl: {
-      require: true,
-      rejectUnauthorized: false
-    }
-  };
-}
+// Always use SSL for this database configuration
+sequelizeOptions.dialectOptions = {
+  ssl: {
+    require: true,
+    rejectUnauthorized: false
+  }
+};
 
 const sequelize = DATABASE_URL
   ? new Sequelize(DATABASE_URL, sequelizeOptions)
