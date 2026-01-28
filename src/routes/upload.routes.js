@@ -1,8 +1,8 @@
 const uploadController = require('../controllers/upload.controller');
-const { 
-  uploadSingle, 
-  uploadMultiple, 
-  uploadFields, 
+const {
+  uploadSingle,
+  uploadMultiple,
+  uploadFields,
   handleMulterError,
   cleanupTempFiles
 } = require('../middlewares/upload.middleware');

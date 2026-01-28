@@ -159,3 +159,62 @@ exports.login = async (req, res) => {
         res.status(500).send({ message: error.message });
     }
 };
+
+// Get Current Admin Profile
+exports.getProfile = async (req, reply) => {
+    try {
+        console.log('GetProfile Request User:', req.user);
+        if (!req.user || !req.user.id) {
+            throw new Error('User not attached to request');
+        }
+
+        const adminId = req.user.id;
+        console.log('Fetching admin with ID:', adminId);
+
+        const admin = await Admin.findByPk(adminId, {
+            attributes: { exclude: ['password', 'otpCode', 'otpExpiresAt'] },
+            raw: true
+        });
+
+        if (!admin) {
+            console.log('Admin not found for ID:', adminId);
+            return sendError(reply, 'Admin not found', 404);
+        }
+
+        return sendSuccess(reply, admin, 'Profile retrieved successfully');
+    } catch (error) {
+        console.error('GetProfile Error:', error);
+        return sendError(reply, error.message, 500);
+    }
+};
+
+// Update Current Admin Profile
+exports.updateProfile = async (req, reply) => {
+    try {
+        const adminId = req.user.id;
+        const updateData = req.body;
+
+        // Prevent updating sensitive fields via this endpoint
+        delete updateData.password;
+        delete updateData.username;
+        delete updateData.role;
+        delete updateData.otpCode;
+        delete updateData.otpExpiresAt;
+
+        const admin = await Admin.findByPk(adminId);
+
+        if (!admin) {
+            return sendError(reply, 'Admin not found', 404);
+        }
+
+        await admin.update(updateData);
+
+        const updatedAdmin = await Admin.findByPk(adminId, {
+            attributes: { exclude: ['password', 'otpCode', 'otpExpiresAt'] }
+        });
+
+        return sendSuccess(reply, updatedAdmin, 'Profile updated successfully');
+    } catch (error) {
+        return sendError(reply, error.message, 500);
+    }
+};

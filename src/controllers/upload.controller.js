@@ -1,5 +1,55 @@
+const fs = require('fs');
+const path = require('path');
 const cloudinaryService = require('../services/cloudinary.service');
 const logger = require('../utils/logger');
+
+// Helper to check if Cloudinary is configured
+const isCloudinaryConfigured = () => {
+  return process.env.CLOUDINARY_CLOUD_NAME &&
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET;
+};
+
+// Helper for local file handling (Async)
+const handleLocalUpload = async (file, subDir = '') => {
+  try {
+    const uploadsRoot = path.join(__dirname, '../../uploads');
+    const targetDir = path.join(uploadsRoot, subDir);
+
+    // Ensure directory exists
+    if (!fs.existsSync(targetDir)) {
+      await fs.promises.mkdir(targetDir, { recursive: true });
+    }
+
+    const targetPath = path.join(targetDir, file.filename);
+
+    // Check if source file exists
+    if (!fs.existsSync(file.path)) {
+      throw new Error(`Source file not found at ${file.path}`);
+    }
+
+    // Copy file
+    await fs.promises.copyFile(file.path, targetPath);
+
+    // Try to cleanup temp file differently depending on OS locking
+    try {
+      // Use fs.unlink, but catch if it fails (Windows locking issues)
+      fs.unlink(file.path, (err) => {
+        if (err) logger.warn(`Failed to cleanup temp file ${file.path}: ${err.message}`);
+      });
+    } catch (cleanupErr) {
+      logger.warn(`Cleanup error: ${cleanupErr.message}`);
+    }
+
+    // Return the URL path
+    // Assumes app serves 'uploads' at '/uploads/'
+    // Normalize path separators to forward slashes for URL
+    return `/uploads/${subDir ? subDir + '/' : ''}${file.filename}`;
+  } catch (error) {
+    logger.error('Local upload handler failed:', error);
+    throw new Error('Failed to save file locally');
+  }
+};
 
 /**
  * Upload single file
@@ -22,11 +72,25 @@ const uploadSingleFile = async (req, reply) => {
       });
     }
 
-    // Upload to Cloudinary
-    const uploadResult = await cloudinaryService.uploadFile(req.file.path, {
-      folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/general`,
-      public_id: req.file.filename.split('.')[0]
-    });
+    let uploadResult;
+    if (isCloudinaryConfigured()) {
+      // Upload to Cloudinary
+      uploadResult = await cloudinaryService.uploadFile(req.file.path, {
+        folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/general`,
+        public_id: req.file.filename.split('.')[0]
+      });
+    } else {
+      logger.info('Cloudinary not configured, using local storage (general)');
+      const localUrl = await handleLocalUpload(req.file, 'general');
+      uploadResult = {
+        secure_url: localUrl,
+        public_id: req.file.filename,
+        url: localUrl,
+        format: path.extname(req.file.originalname).substring(1).replace('.', ''),
+        original_filename: req.file.originalname,
+        resource_type: 'raw'
+      };
+    }
 
     reply.status(200).send({
       success: true,
@@ -55,6 +119,7 @@ const uploadMultipleFiles = async (req, reply) => {
     }
 
     const uploadResults = [];
+    const useCloudinary = isCloudinaryConfigured();
 
     // Process each file
     for (const file of req.files) {
@@ -66,11 +131,21 @@ const uploadMultipleFiles = async (req, reply) => {
           continue;
         }
 
-        // Upload to Cloudinary
-        const result = await cloudinaryService.uploadFile(file.path, {
-          folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/general`,
-          public_id: file.filename.split('.')[0]
-        });
+        let result;
+        if (useCloudinary) {
+          result = await cloudinaryService.uploadFile(file.path, {
+            folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/general`,
+            public_id: file.filename.split('.')[0]
+          });
+        } else {
+          const localUrl = await handleLocalUpload(file, 'general');
+          result = {
+            secure_url: localUrl,
+            public_id: file.filename,
+            url: localUrl,
+            original_filename: file.originalname
+          };
+        }
 
         uploadResults.push(result);
       } catch (fileError) {
@@ -122,18 +197,34 @@ const uploadImage = async (req, reply) => {
       });
     }
 
-    // Upload optimized image
-    const uploadResult = await cloudinaryService.uploadImage(req.file.path, {
-      folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/images`,
-      public_id: req.file.filename.split('.')[0],
-      width: 1920,
-      height: 1080,
-      quality: 'auto:good'
-    });
+    let uploadResult;
+    if (isCloudinaryConfigured()) {
+      // Upload optimized image
+      uploadResult = await cloudinaryService.uploadImage(req.file.path, {
+        folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/images`,
+        public_id: req.file.filename.split('.')[0],
+        width: 1920,
+        height: 1080,
+        quality: 'auto:good'
+      });
+    } else {
+      logger.info('Cloudinary not configured, using local storage (images)');
+      const localUrl = await handleLocalUpload(req.file, 'images');
+      uploadResult = {
+        secure_url: localUrl,
+        public_id: req.file.filename,
+        url: localUrl,
+        format: path.extname(req.file.originalname).substring(1).replace('.', ''),
+        width: 0,
+        height: 0,
+        original_filename: req.file.originalname,
+        resource_type: 'image'
+      };
+    }
 
     reply.status(200).send({
       success: true,
-      message: 'Image uploaded and optimized successfully',
+      message: 'Image uploaded successfully',
       data: uploadResult
     });
   } catch (error) {
@@ -167,12 +258,26 @@ const uploadVideo = async (req, reply) => {
       });
     }
 
-    // Upload video
-    const uploadResult = await cloudinaryService.uploadVideo(req.file.path, {
-      folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/videos`,
-      public_id: req.file.filename.split('.')[0],
-      quality: 'auto'
-    });
+    let uploadResult;
+    if (isCloudinaryConfigured()) {
+      const uploadResult = await cloudinaryService.uploadVideo(req.file.path, {
+        folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/videos`,
+        public_id: req.file.filename.split('.')[0],
+        quality: 'auto'
+      });
+      uploadResult = uploadResult;
+    } else {
+      logger.info('Cloudinary not configured, using local storage (videos)');
+      const localUrl = await handleLocalUpload(req.file, 'videos');
+      uploadResult = {
+        secure_url: localUrl,
+        public_id: req.file.filename,
+        url: localUrl,
+        format: path.extname(req.file.originalname).substring(1).replace('.', ''),
+        original_filename: req.file.originalname,
+        resource_type: 'video'
+      };
+    }
 
     reply.status(200).send({
       success: true,
@@ -209,11 +314,24 @@ const uploadPDF = async (req, reply) => {
       });
     }
 
-    // Upload PDF
-    const uploadResult = await cloudinaryService.uploadPDF(req.file.path, {
-      folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/documents`,
-      public_id: req.file.filename.split('.')[0]
-    });
+    let uploadResult;
+    if (isCloudinaryConfigured()) {
+      uploadResult = await cloudinaryService.uploadPDF(req.file.path, {
+        folder: `${process.env.CLOUDINARY_UPLOAD_FOLDER}/documents`,
+        public_id: req.file.filename.split('.')[0]
+      });
+    } else {
+      logger.info('Cloudinary not configured, using local storage (documents)');
+      const localUrl = await handleLocalUpload(req.file, 'documents');
+      uploadResult = {
+        secure_url: localUrl,
+        public_id: req.file.filename,
+        url: localUrl,
+        format: 'pdf',
+        original_filename: req.file.originalname,
+        resource_type: 'raw'
+      };
+    }
 
     reply.status(200).send({
       success: true,
@@ -230,7 +348,7 @@ const uploadPDF = async (req, reply) => {
 };
 
 /**
- * Delete file from Cloudinary
+ * Delete file from Cloudinary (or Local)
  */
 const deleteFile = async (req, reply) => {
   try {
@@ -243,12 +361,45 @@ const deleteFile = async (req, reply) => {
       });
     }
 
-    const result = await cloudinaryService.deleteFile(publicId);
+    if (isCloudinaryConfigured()) {
+      const result = await cloudinaryService.deleteFile(publicId);
+      reply.status(200).send({
+        success: true,
+        message: result.message
+      });
+    } else {
+      // Local deletion
+      // Since we don't store the full path in publicId (it's often just filename), we need to find it.
+      // However, for local uploads, we set public_id to filename in handleLocalUpload.
+      // We'll search in all 3 subfolders: images, videos, documents, and root.
 
-    reply.status(200).send({
-      success: true,
-      message: result.message
-    });
+      const uploadsRoot = path.join(__dirname, '../../uploads');
+      // Search
+      const possiblePaths = [
+        path.join(uploadsRoot, 'images', publicId),
+        path.join(uploadsRoot, 'general', publicId),
+        path.join(uploadsRoot, 'videos', publicId),
+        path.join(uploadsRoot, 'documents', publicId),
+        path.join(uploadsRoot, publicId) // unlikely
+      ];
+
+      let deleted = false;
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          await fs.promises.unlink(p);
+          deleted = true;
+          break;
+        }
+      }
+
+      if (deleted) {
+        reply.status(200).send({ success: true, message: 'File deleted locally' });
+      } else {
+        // If we can't find it, maybe it's fine
+        reply.status(200).send({ success: true, message: 'File not found locally, but marked as deleted' });
+      }
+    }
+
   } catch (error) {
     logger.error('File deletion error:', error);
     reply.status(500).send({

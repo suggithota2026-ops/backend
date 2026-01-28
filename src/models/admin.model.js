@@ -38,6 +38,34 @@ const Admin = sequelize.define('Admin', {
         type: DataTypes.STRING,
         defaultValue: 'ADMIN',
     },
+    email: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    bio: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    dob: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+    },
+    country: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+    },
+    city: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+    },
+    postalCode: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+    },
+    avatarUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
     isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
