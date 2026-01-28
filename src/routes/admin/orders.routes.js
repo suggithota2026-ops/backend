@@ -3,6 +3,7 @@ const {
   getOrders,
   getOrder,
   updateOrderStatus,
+  updateOrder,
   generateOrderInvoice,
   getTodaysOrdersSummary,
 } = require('../../controllers/admin/order.controller');
@@ -46,6 +47,44 @@ const orderRoutes = async (fastify, options) => {
     },
     // preHandler: [authenticate, requireAdmin],
   }, getOrder);
+
+  fastify.put('/orders/:id', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Update order details (Full Update)',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        properties: {
+          status: { type: 'string' },
+          assignedTo: { type: 'string', nullable: true },
+          deliveryCharge: { type: 'number' },
+          paymentMethod: { type: 'string' },
+          specialInstructions: { type: 'string' },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                productId: { type: 'number' },
+                productName: { type: 'string' },
+                quantity: { type: 'number' },
+                unitPrice: { type: 'number' },
+                totalPrice: { type: 'number' }
+              }
+            }
+          }
+        },
+      },
+    },
+    // preHandler: [authenticate, requireAdmin],
+  }, updateOrder);
 
   fastify.patch('/orders/:id/status', {
     schema: {

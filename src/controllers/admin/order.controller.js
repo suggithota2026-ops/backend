@@ -94,6 +94,97 @@ const getOrder = async (request, reply) => {
   }
 };
 
+const updateOrder = async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const {
+      status,
+      assignedTo,
+      deliveryCharge,
+      paymentMethod,
+      specialInstructions,
+      items
+    } = request.body;
+
+    const orderId = parseInt(id);
+
+    if (isNaN(orderId)) {
+      return sendError(reply, 'Invalid order ID', 400);
+    }
+
+    const order = await Order.findByPk(orderId, {
+      include: [{
+        model: User,
+        as: 'hotel',
+        required: false,
+      }],
+    });
+
+    if (!order) {
+      return sendError(reply, 'Order not found', 404);
+    }
+
+    const oldStatus = order.status;
+    const updateData = {};
+
+    // Update simple fields
+    if (status) updateData.status = status;
+    if (assignedTo !== undefined) updateData.assignedTo = assignedTo; // Allow null
+    if (paymentMethod) updateData.paymentMethod = paymentMethod;
+    if (specialInstructions !== undefined) updateData.specialInstructions = specialInstructions;
+
+    // Handle Items and Pricing
+    let currentSubtotal = parseFloat(order.subtotal);
+    let currentDeliveryCharge = parseFloat(order.deliveryCharge);
+
+    if (items && Array.isArray(items)) {
+      updateData.items = items;
+      // Recalculate subtotal from items
+      currentSubtotal = items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0);
+      updateData.subtotal = currentSubtotal;
+    }
+
+    if (deliveryCharge !== undefined) {
+      currentDeliveryCharge = parseFloat(deliveryCharge);
+      updateData.deliveryCharge = currentDeliveryCharge;
+    }
+
+    // Recalculate Total Amount
+    updateData.totalAmount = currentSubtotal + currentDeliveryCharge;
+
+    await order.update(updateData);
+
+    // Reload order to get updated data
+    await order.reload({
+      include: [{
+        model: User,
+        as: 'hotel',
+        required: false,
+      }],
+    });
+
+    // Send notification based on status change
+    if (status && status !== oldStatus) {
+      if (status === ORDER_STATUS.CONFIRMED && oldStatus === ORDER_STATUS.PENDING) {
+        await sendOrderNotification(order, 'order_confirmation', order.hotelId);
+      } else if (status === ORDER_STATUS.DISPATCHED && oldStatus !== ORDER_STATUS.DISPATCHED) {
+        await sendOrderNotification(order, 'order_dispatched', order.hotelId);
+      } else if (status === ORDER_STATUS.DELIVERED && oldStatus !== ORDER_STATUS.DELIVERED) {
+        await sendOrderNotification(order, 'order_delivered', order.hotelId);
+        // Generate invoice when order is delivered
+        await generateInvoice(order.id);
+      } else if (status === ORDER_STATUS.CANCELLED && oldStatus !== ORDER_STATUS.CANCELLED) {
+        await sendOrderNotification(order, 'order_cancelled', order.hotelId);
+      }
+    }
+
+    return sendSuccess(reply, order, 'Order updated successfully');
+  } catch (error) {
+    logger.error('Error updating order:', error);
+    return sendError(reply, 'Failed to update order', 500);
+  }
+};
+
 const updateOrderStatus = async (request, reply) => {
   try {
     const { id } = request.params;
@@ -266,6 +357,7 @@ module.exports = {
   getOrders,
   getOrder,
   updateOrderStatus,
+  updateOrder,
   generateOrderInvoice,
   getTodaysOrdersSummary,
 };
