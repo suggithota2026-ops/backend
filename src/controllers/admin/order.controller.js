@@ -209,15 +209,18 @@ const updateOrderStatus = async (request, reply) => {
 
     const oldStatus = order.status;
     const updateData = {};
-    if (status) updateData.status = status;
-    if (assignedTo) {
+    if (status) updateData.status = status.toLowerCase();
+
+    if (assignedTo !== undefined) {
       updateData.assignedTo = assignedTo;
     }
+
     if (deliveryCharge !== undefined) {
       updateData.deliveryCharge = parseFloat(deliveryCharge);
       // Recalculate totalAmount: subtotal + new deliveryCharge
       updateData.totalAmount = parseFloat(order.subtotal) + updateData.deliveryCharge;
     }
+
     if (paymentMethod) {
       updateData.paymentMethod = paymentMethod;
     }

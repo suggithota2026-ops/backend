@@ -21,12 +21,12 @@ const updateOrderStatusSchema = Joi.object({
   status: Joi.string()
     .valid(...Object.values(ORDER_STATUS))
     .optional(),
-  assignedTo: Joi.string().trim().optional().allow(''),
+  assignedTo: Joi.string().trim().optional().allow('', null),
   deliveryCharge: Joi.number().min(0).optional(),
   paymentMethod: Joi.string()
     .valid(...Object.values(PAYMENT_METHOD))
     .optional(),
-});
+}).unknown(true);
 
 const reorderSchema = Joi.object({
   orderId: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
