@@ -6,7 +6,20 @@ const Joi = require('joi');
 // ... (existing schemas) ...
 
 const adminAuthRoutes = async (fastify, options) => {
-    // ... (existing routes) ...
+    // Add send-otp route
+    fastify.post('/auth/send-otp', {
+        schema: {
+            tags: ['admin'],
+            summary: 'Send OTP to Admin',
+            body: {
+                type: 'object',
+                required: ['mobileNumber'],
+                properties: {
+                    mobileNumber: { type: 'string' },
+                },
+            },
+        },
+    }, sendOtp);
 
     fastify.post('/auth/verify-otp', {
         schema: {
