@@ -147,25 +147,33 @@ const sendAdminOrderNotification = async (order, hotel) => {
     const title = 'New Order Received 📦';
     const message = `Order ID: ${orderId}\n\nHotel Name: ${hotelName}\n\nItem List:\n${itemList}\n\nItem Count: ${itemCount}\n\nA new order has been placed and is waiting for your confirmation.`;
 
-    // Create a broadcast notification (recipientId: null) for all admins to see
-    const notification = await createNotification({
-      type: NOTIFICATION_TYPES.NEW_ORDER,
-      title,
-      message,
-      recipient: null,  // Broadcast to all admins
-      order: order.id,
-      metadata: {
-        orderId: order.id,
-        orderNumber: orderId,
-        hotelId: hotel?.id,
-        hotelName: hotelName,
-        totalAmount: order.totalAmount,
-        itemCount: itemCount,
-      },
+    // Skip creating a database notification record as per user request
+    // ("dont add new order received notification in the notification page")
+    // Instead, only send push notifications to admins/staff with FCM tokens
+    const { ROLES } = require('../config/constants');
+    const admins = await User.findAll({
+      where: {
+        role: { [Op.in]: [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.STAFF] },
+        fcmToken: { [Op.ne]: null }
+      }
     });
 
-    logger.info(`Sent new order notification for order ${orderId}`);
-    return notification;
+    if (admins.length > 0) {
+      for (const admin of admins) {
+        await sendPushNotification(
+          admin.fcmToken,
+          title,
+          message,
+          {
+            type: NOTIFICATION_TYPES.NEW_ORDER,
+            orderId: String(order.id),
+          }
+        );
+      }
+    }
+
+    logger.info(`Sent push-only notifications for new order ${orderId} to ${admins.length} admins`);
+    return null; // Return null since no database record was created
   } catch (error) {
     logger.error('Error sending admin order notification:', error);
     throw error;

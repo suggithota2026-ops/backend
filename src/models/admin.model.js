@@ -62,6 +62,18 @@ const Admin = sequelize.define('Admin', {
         type: DataTypes.STRING(20),
         allowNull: true,
     },
+    address: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    gstNumber: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+    },
+    businessName: {
+        type: DataTypes.STRING(200),
+        allowNull: true,
+    },
     avatarUrl: {
         type: DataTypes.TEXT,
         allowNull: true,

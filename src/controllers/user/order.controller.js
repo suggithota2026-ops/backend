@@ -98,6 +98,7 @@ const createOrder = async (request, reply) => {
         productId: product.id,
         productName: product.name,
         quantity: item.quantity,
+        unit: product.unit,
         unitPrice,
         totalPrice,
       });

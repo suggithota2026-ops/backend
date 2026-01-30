@@ -23,64 +23,10 @@ const firebaseConfig = {
 };
 
 const initializeFirebaseClient = () => {
-  try {
-    if (firebaseClientApp) {
-      logger.info('Firebase Client SDK already initialized');
-      return firebaseClientApp;
-    }
-
-    // Dynamically import Firebase client SDK modules
-    const { initializeApp, getApps } = require('firebase/app');
-    
-    // Initialize Firebase app
-    if (getApps().length === 0) {
-      firebaseClientApp = initializeApp(firebaseConfig);
-      logger.info('Firebase Client App initialized');
-    } else {
-      firebaseClientApp = getApps()[0];
-      logger.info('Using existing Firebase Client App');
-    }
-
-    // Initialize Firebase services (with error handling for Node.js limitations)
-    try {
-      const { getFirestore } = require('firebase/firestore');
-      firestore = getFirestore(firebaseClientApp);
-      logger.info('Firestore initialized');
-    } catch (error) {
-      logger.warn('Firestore initialization warning:', error.message);
-    }
-
-    try {
-      const { getStorage } = require('firebase/storage');
-      storage = getStorage(firebaseClientApp);
-      logger.info('Storage initialized');
-    } catch (error) {
-      logger.warn('Storage initialization warning:', error.message);
-    }
-
-    try {
-      const { getAuth } = require('firebase/auth');
-      auth = getAuth(firebaseClientApp);
-      logger.info('Auth initialized');
-    } catch (error) {
-      logger.warn('Auth initialization warning:', error.message);
-    }
-
-    // Analytics is browser-only, skip in Node.js
-    try {
-      const { getAnalytics, isSupported } = require('firebase/analytics');
-      // Analytics requires browser environment, skip in Node.js
-      logger.info('Analytics skipped (Node.js environment)');
-    } catch (error) {
-      // Expected in Node.js
-    }
-
-    logger.info('Firebase Client SDK initialized successfully');
-    return firebaseClientApp;
-  } catch (error) {
-    logger.error('Firebase Client SDK initialization failed:', error);
-    return null;
-  }
+  // Skip client-side Firebase SDK initialization in backend environment
+  // This prevents auth errors when client-side config is not provided
+  logger.info('Skipping Firebase Client SDK initialization in backend environment');
+  return null;
 };
 
 // Firebase Admin SDK (for server-side operations)
@@ -130,9 +76,8 @@ const initializeFirebaseAdmin = () => {
   }
 };
 
-// Initialize both SDKs
+// Initialize Admin SDK only (client SDK is not needed in backend)
 const initializeFirebase = () => {
-  initializeFirebaseClient();
   initializeFirebaseAdmin();
 };
 
