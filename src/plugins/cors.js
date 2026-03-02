@@ -3,8 +3,7 @@ const fp = require('fastify-plugin');
 const fastifyCors = require('@fastify/cors');
 
 const DEFAULT_ALLOWED_ORIGINS = [
-  'https://prk-smile-frontend.vercel.app',
-  'https://www.prk-smile-frontend.vercel.app',
+  'https://frontend-puce-three-76.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
