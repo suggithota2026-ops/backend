@@ -13,11 +13,19 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 
 function getAllowedOrigins() {
-  const env = process.env.CORS_ORIGINS || process.env.ALLOWED_ORIGINS;
-  if (env) {
-    return env.split(',').map((o) => o.trim()).filter(Boolean);
+  // Explicit list from env (comma-separated) – use as-is
+  const envList = process.env.CORS_ORIGINS || process.env.ALLOWED_ORIGINS;
+  let origins = envList
+    ? envList.split(',').map((o) => o.trim()).filter(Boolean)
+    : [...DEFAULT_ALLOWED_ORIGINS];
+
+  // Add FRONTEND_URL from env so you can set it in Render/Vercel without replacing the whole list
+  const frontendUrl = process.env.FRONTEND_URL && process.env.FRONTEND_URL.trim();
+  if (frontendUrl && !origins.includes(frontendUrl)) {
+    origins = [frontendUrl, ...origins];
   }
-  return DEFAULT_ALLOWED_ORIGINS;
+
+  return origins;
 }
 
 async function corsPlugin(fastify, options) {
