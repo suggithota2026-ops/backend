@@ -91,29 +91,49 @@ const runSchemaMigration = async () => {
 
         // 6. Update paymentMethod enum values
         try {
-            // Check if cod and credit exist in the enum
+            const enumTypeName = 'enum_orders_paymentMethod';
             const enumQuery = `
                 SELECT e.enumlabel
                 FROM pg_enum e
                 JOIN pg_type t ON e.enumtypid = t.oid
-                WHERE t.typname = 'enum_orders_paymentMethod'
+                WHERE t.typname = '${enumTypeName}'
             `;
             const enumLabels = await sequelize.query(enumQuery, { type: QueryTypes.SELECT });
-            const labels = enumLabels.map(l => l.enumlabel);
+            if (!enumLabels || enumLabels.length === 0) {
+                logger.info(`Enum ${enumTypeName} not found, skipping paymentMethod migration.`);
+            } else {
+                const labels = enumLabels.map(l => l.enumlabel);
 
-            if (!labels.includes('cod')) {
-                logger.info("Adding 'cod' to enum_orders_paymentMethod...");
-                await sequelize.query('ALTER TYPE "enum_orders_paymentMethod" ADD VALUE IF NOT EXISTS \'cod\'');
-            }
-            if (!labels.includes('credit')) {
-                logger.info("Adding 'credit' to enum_orders_paymentMethod...");
-                await sequelize.query('ALTER TYPE "enum_orders_paymentMethod" ADD VALUE IF NOT EXISTS \'credit\'');
-            }
+                for (const value of ['cod', 'credit', 'offline']) {
+                    if (!labels.includes(value)) {
+                        logger.info(`Adding '${value}' to ${enumTypeName}...`);
+                        try {
+                            await sequelize.query(`ALTER TYPE "${enumTypeName}" ADD VALUE IF NOT EXISTS '${value}'`);
+                        } catch (addErr) {
+                            const msg = (addErr && addErr.message) ? addErr.message : String(addErr);
+                            logger.warn(`Could not add '${value}' to enum (may already exist): ${msg}`);
+                        }
+                    }
+                }
 
-            // Update existing 'cash' to 'cod'
-            await sequelize.query(`UPDATE orders SET "paymentMethod" = 'cod' WHERE "paymentMethod" = 'cash'`);
+                // Re-fetch enum so we see newly added values (ALTER TYPE ADD VALUE commits in PG)
+                const enumLabelsAfter = await sequelize.query(enumQuery, { type: QueryTypes.SELECT });
+                const labelsAfter = (enumLabelsAfter || []).map(l => l.enumlabel);
+
+                // Update existing 'cash' to 'cod' only if enum has both (legacy migration)
+                if (labelsAfter.includes('cash') && labelsAfter.includes('cod')) {
+                    try {
+                        await sequelize.query(`UPDATE orders SET "paymentMethod" = 'cod' WHERE "paymentMethod" = 'cash'`);
+                        logger.info("Updated legacy 'cash' paymentMethod to 'cod'.");
+                    } catch (updateErr) {
+                        const msg = (updateErr && updateErr.message) ? updateErr.message : String(updateErr);
+                        logger.warn('PaymentMethod cash->cod update skipped or failed: ' + msg);
+                    }
+                }
+            }
         } catch (err) {
-            logger.error('Failed to update paymentMethod enum:', err.message);
+            const msg = (err && err.message) ? err.message : String(err);
+            logger.error('Failed to update paymentMethod enum: ' + msg);
         }
 
         logger.info('Schema migration check completed.');
