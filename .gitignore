@@ -4,3 +4,22 @@ logs/
 uploads/
 port_check.log
 package-lock.json
+
+# Local credentials / sensitive files
+config/firebase-service-account.json
+
+# Local test payloads
+data_contact.json
+data_login.json
+
+# One-off root scripts (debug/migration/verification)
+add-delivery-charge-column.js
+add-orderid-column.js
+update-payment-enum.js
+verify_oos.js
+test_api_check.js
+test_api_check_native.js
+
+# Non-production utility scripts
+src/examples/
+src/scripts/
