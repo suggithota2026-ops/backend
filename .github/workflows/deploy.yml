@@ -1,4 +1,4 @@
-name: 🚀 Deploy Backend
+name: Deploy Backend
 
 on:
   push:
@@ -10,15 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy Backend to VPS
+      - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
+          username: root
           key: ${{ secrets.SSH_KEY }}
+          port: 22
           script: |
             cd /var/www/suggithota/backend
+
             git pull origin main
+
             npm install
+
             pm2 delete suggi-backend || true
-            pm2 start index.js --name "suggi-backend"
+            pm2 start src/server.js --name "suggi-backend"
+
+            pm2 save
