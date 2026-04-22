@@ -116,6 +116,11 @@ const deleteAdmin = async (request, reply) => {
             return sendError(reply, 'User not found', 404);
         }
 
+        // Prevent deleting Admin accounts (only allow edit)
+        if (String(admin.role).toUpperCase() === 'ADMIN') {
+            return sendError(reply, 'Admin accounts cannot be deleted', 403);
+        }
+
         await admin.destroy();
 
         return sendSuccess(reply, null, 'User deleted successfully');
