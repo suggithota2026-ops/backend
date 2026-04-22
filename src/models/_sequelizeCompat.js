@@ -10,6 +10,32 @@ function buildSort(order) {
   return sort;
 }
 
+function applyAttributes(query, attributes) {
+  if (!attributes) return;
+
+  // Sequelize: attributes: ['id','name'] OR { exclude: ['password'], include: [...] }
+  if (Array.isArray(attributes)) {
+    query.select(attributes.join(' '));
+    return;
+  }
+
+  if (attributes && typeof attributes === 'object') {
+    const selects = [];
+    if (Array.isArray(attributes.include)) {
+      // include can contain strings or [literal, alias] in Sequelize; we only support string fields
+      for (const inc of attributes.include) {
+        if (typeof inc === 'string') selects.push(inc);
+      }
+    }
+    if (Array.isArray(attributes.exclude)) {
+      for (const exc of attributes.exclude) {
+        if (typeof exc === 'string') selects.push(`-${exc}`);
+      }
+    }
+    if (selects.length > 0) query.select(selects.join(' '));
+  }
+}
+
 function toMongoRegexFromILike(pattern) {
   // pattern like: %text% or text% or %text
   const raw = String(pattern);
@@ -33,6 +59,8 @@ function normalizeWhere(where) {
 
     if (key === 'Symbol(or)' && Array.isArray(val)) {
       out.$or = val.map(normalizeWhere);
+    } else if (key === 'Symbol(and)' && Array.isArray(val)) {
+      out.$and = val.map(normalizeWhere);
     }
   }
 
@@ -48,10 +76,25 @@ function normalizeWhere(where) {
 
       if (opKey === 'Symbol(iLike)') {
         out[k] = toMongoRegexFromILike(opVal);
+      } else if (opKey === 'Symbol(like)') {
+        // Sequelize like is usually case-sensitive; keep it simple (case-insensitive is fine for UI search)
+        out[k] = toMongoRegexFromILike(opVal);
       } else if (opKey === 'Symbol(in)' && Array.isArray(opVal)) {
         out[k] = { $in: opVal };
+      } else if (opKey === 'Symbol(notIn)' && Array.isArray(opVal)) {
+        out[k] = { $nin: opVal };
       } else if (opKey === 'Symbol(or)' && Array.isArray(opVal)) {
         out[k] = { $in: opVal };
+      } else if (opKey === 'Symbol(ne)') {
+        out[k] = { $ne: opVal };
+      } else if (opKey === 'Symbol(gt)') {
+        out[k] = { $gt: opVal };
+      } else if (opKey === 'Symbol(gte)') {
+        out[k] = { $gte: opVal };
+      } else if (opKey === 'Symbol(lt)') {
+        out[k] = { $lt: opVal };
+      } else if (opKey === 'Symbol(lte)') {
+        out[k] = { $lte: opVal };
       } else if (opKey === 'Symbol(contains)' && Array.isArray(opVal)) {
         // JSONB contains for arrays of objects: [{id: '...'}]
         const first = opVal[0];
@@ -76,7 +119,7 @@ function applySequelizeCompat(schema) {
   schema.statics.findByPk = function findByPk(id, options = {}) {
     const numericId = typeof id === 'string' ? Number(id) : id;
     const query = mongooseFindOne.call(this, { id: numericId });
-    if (options.attributes) query.select(options.attributes.join(' '));
+    applyAttributes(query, options.attributes);
     return query.exec();
   };
 
@@ -94,7 +137,7 @@ function applySequelizeCompat(schema) {
     } = options;
 
     const query = this.find(normalizeWhere(where));
-    if (attributes) query.select(attributes.join(' '));
+    applyAttributes(query, attributes);
     const sort = buildSort(order);
     if (sort) query.sort(sort);
     if (offset) query.skip(offset);
@@ -136,7 +179,7 @@ function applySequelizeCompat(schema) {
     const attributes = isSequelizeOptions ? options.attributes : undefined;
 
     const query = mongooseFindOne.call(this, normalizeWhere(where));
-    if (attributes) query.select(attributes.join(' '));
+    applyAttributes(query, attributes);
     return query.exec();
   };
 
