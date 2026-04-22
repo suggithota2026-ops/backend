@@ -1,60 +1,24 @@
-// Contact Message Model
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 
-const ContactMessage = sequelize.define('ContactMessage', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const ContactMessageSchema = new mongoose.Schema(
+  {
+    hotelName: { type: String, required: true },
+    contactNumber: { type: String, required: true },
+    address: { type: String, required: true },
+    city: { type: String, required: true },
+    pinCode: { type: String, required: true },
+    landmark: { type: String, default: null },
+    email: { type: String, default: null },
+    message: { type: String, required: true },
+    status: { type: String, enum: ['pending', 'contacted', 'resolved'], default: 'pending' },
+    notes: { type: String, default: null },
   },
-  hotelName: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  contactNumber: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  address: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-  },
-  city: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  pinCode: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  landmark: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  email: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    validate: {
-      isEmail: true,
-    },
-  },
-  message: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-  },
-  status: {
-    type: DataTypes.ENUM('pending', 'contacted', 'resolved'),
-    defaultValue: 'pending',
-  },
-  notes: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-}, {
-  tableName: 'contact_messages',
-  timestamps: true,
-  underscored: true,
-});
+  { timestamps: true }
+);
 
-module.exports = ContactMessage;
+applyAutoIncrement(ContactMessageSchema, { sequenceName: 'contact_messages' });
+applySequelizeCompat(ContactMessageSchema);
+
+module.exports = mongoose.models.ContactMessage || mongoose.model('ContactMessage', ContactMessageSchema);

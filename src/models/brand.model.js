@@ -1,62 +1,19 @@
-// Brand model
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 
-const Brand = sequelize.define('Brand', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
+const BrandSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, unique: true, trim: true },
+    imageUrl: { type: String, required: true },
+    description: { type: String, default: null },
+    isActive: { type: Boolean, default: true },
+    createdBy: { type: Number, default: null },
   },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-    validate: {
-      notEmpty: true,
-      len: [1, 100]
-    }
-  },
-  imageUrl: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-    validate: {
-      notEmpty: true
-    }
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
-  },
-  createdBy: {
-    type: DataTypes.INTEGER,
-    allowNull: true
-  }
-}, {
-  tableName: 'brands',
-  timestamps: true,
-  underscored: true
-});
+  { timestamps: true }
+);
 
+applyAutoIncrement(BrandSchema, { sequenceName: 'brands' });
+applySequelizeCompat(BrandSchema);
 
-// Define associations after model definition
-Brand.associate = (models) => {
-  Brand.belongsTo(models.Admin, {
-    foreignKey: 'createdBy',
-    as: 'creator',
-    onDelete: 'SET NULL',
-    onUpdate: 'CASCADE'
-  });
-  
-  // Also define the reverse association
-  models.Admin.hasMany(Brand, {
-    foreignKey: 'createdBy',
-    as: 'createdBrands'
-  });
-};
-
-module.exports = Brand;
+module.exports = mongoose.models.Brand || mongoose.model('Brand', BrandSchema);

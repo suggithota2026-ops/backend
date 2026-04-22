@@ -1,53 +1,27 @@
-// PostgreSQL connection via Sequelize
-const { Sequelize } = require('sequelize');
+// MongoDB connection via Mongoose
+const mongoose = require('mongoose');
 const logger = require('../utils/logger');
-const {
-  DATABASE_URL,
-  DB_HOST,
-  DB_PORT,
-  DB_NAME,
-  DB_USER,
-  DB_PASSWORD,
-  DB_DIALECT,
-  NODE_ENV,
-} = require('./env');
-
-const sequelizeOptions = {
-  host: DB_HOST,
-  port: DB_PORT,
-  dialect: DB_DIALECT,
-  logging: NODE_ENV === 'development' ? console.log : false,
-};
-
-// Add SSL for production if needed (required by Render/Heroku/AWS RDS)
-// Always use SSL for this database configuration
-sequelizeOptions.dialectOptions = {
-  ssl: {
-    require: true,
-    rejectUnauthorized: false
-  }
-};
-
-const sequelize = DATABASE_URL
-  ? new Sequelize(DATABASE_URL, sequelizeOptions)
-  : new Sequelize(DB_NAME, DB_USER, DB_PASSWORD, sequelizeOptions);
+const { MONGODB_URI, NODE_ENV } = require('./env');
 
 const connectDB = async () => {
   try {
-    await sequelize.authenticate();
-    logger.info(`PostgreSQL connected successfully in ${NODE_ENV} mode`);
+    if (!MONGODB_URI) {
+      throw new Error('Missing MONGODB_URI in environment');
+    }
 
-    // Load associations
-    const defineAssociations = require('../models/associations');
-    defineAssociations();
+    // Avoid re-connecting in hot-reload / tests
+    if (mongoose.connection.readyState === 1) return;
 
-    // Auto-create tables from models
-    await sequelize.sync();
-    logger.info('Database synchronized (tables ensured)');
+    await mongoose.connect(MONGODB_URI, {
+      autoIndex: NODE_ENV !== 'production',
+      serverSelectionTimeoutMS: 10000,
+    });
+
+    logger.info(`MongoDB connected successfully in ${NODE_ENV} mode`);
   } catch (error) {
-    logger.error('PostgreSQL connection failed:', error);
+    logger.error('MongoDB connection failed:', error);
     throw error;
   }
 };
 
-module.exports = { sequelize, connectDB };
+module.exports = { mongoose, connectDB };

@@ -1,52 +1,24 @@
-// Customer Product Pricing model (Sequelize)
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 
-const CustomerProductPricing = sequelize.define('CustomerProductPricing', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const CustomerProductPricingSchema = new mongoose.Schema(
+  {
+    customerId: { type: Number, required: true, index: true },
+    productId: { type: Number, required: true, index: true },
+    fixedPrice: { type: Number, required: true },
+    contractStartDate: { type: Date, required: true },
+    contractEndDate: { type: Date, required: true },
+    isActive: { type: Boolean, default: true },
   },
-  customerId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id',
-    },
-    onDelete: 'CASCADE',
-    onUpdate: 'CASCADE',
-  },
-  productId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'products',
-      key: 'id',
-    },
-    onDelete: 'CASCADE',
-    onUpdate: 'CASCADE',
-  },
-  fixedPrice: {
-    type: DataTypes.DECIMAL(12, 2),
-    allowNull: false,
-  },
-  contractStartDate: {
-    type: DataTypes.DATE,
-    allowNull: false,
-  },
-  contractEndDate: {
-    type: DataTypes.DATE,
-    allowNull: false,
-  },
-  isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
-  },
-}, {
-  tableName: 'customer_product_pricing',
-  timestamps: true,
-});
+  { timestamps: true }
+);
 
-module.exports = CustomerProductPricing;
+CustomerProductPricingSchema.index({ customerId: 1, productId: 1 }, { unique: true });
+
+applyAutoIncrement(CustomerProductPricingSchema, { sequenceName: 'customer_product_pricing' });
+applySequelizeCompat(CustomerProductPricingSchema);
+
+module.exports =
+  mongoose.models.CustomerProductPricing ||
+  mongoose.model('CustomerProductPricing', CustomerProductPricingSchema);

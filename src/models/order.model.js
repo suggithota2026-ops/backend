@@ -1,93 +1,42 @@
-// Order model (Sequelize)
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 const { ORDER_STATUS, PAYMENT_METHOD } = require('../config/constants');
-const User = require('./user.model');
 
-const Order = sequelize.define('Order', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const OrderSchema = new mongoose.Schema(
+  {
+    orderNumber: { type: String, unique: true, sparse: true },
+    hotelId: { type: Number, required: true, index: true },
+    items: { type: [mongoose.Schema.Types.Mixed], required: true },
+    subtotal: { type: Number, required: true },
+    deliveryCharge: { type: Number, default: 0 },
+    gstAmount: { type: Number, default: 0 },
+    gstRate: { type: Number, default: 0 },
+    totalAmount: { type: Number, required: true },
+    status: { type: String, enum: Object.values(ORDER_STATUS), default: ORDER_STATUS.PENDING },
+    paymentMethod: { type: String, enum: Object.values(PAYMENT_METHOD), default: PAYMENT_METHOD.COD },
+    paymentStatus: { type: String, enum: ['pending', 'paid'], default: 'pending' },
+    specialInstructions: { type: String, default: null },
+    deliveryTime: { type: Date, default: null },
+    assignedTo: { type: String, default: null },
+    invoiceId: { type: Number, default: null },
   },
-  orderNumber: {
-    type: DataTypes.STRING,
-    unique: true,
-  },
-  hotelId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  // Store order items as JSONB (array of { productId, productName, quantity, unitPrice, totalPrice })
-  items: {
-    type: DataTypes.JSONB,
-    allowNull: false,
-  },
-  subtotal: {
-    type: DataTypes.DECIMAL(12, 2),
-    allowNull: false,
-  },
-  deliveryCharge: {
-    type: DataTypes.DECIMAL(12, 2),
-    defaultValue: 0,
-  },
-  gstAmount: {
-    type: DataTypes.DECIMAL(12, 2),
-    defaultValue: 0,
-  },
-  gstRate: {
-    type: DataTypes.DECIMAL(5, 2),
-    defaultValue: 0,
-  },
-  totalAmount: {
-    type: DataTypes.DECIMAL(12, 2),
-    allowNull: false,
-  },
-  status: {
-    type: DataTypes.ENUM(...Object.values(ORDER_STATUS)),
-    defaultValue: ORDER_STATUS.PENDING,
-  },
-  paymentMethod: {
-    type: DataTypes.ENUM(...Object.values(PAYMENT_METHOD)),
-    defaultValue: PAYMENT_METHOD.COD,
-  },
-  paymentStatus: {
-    type: DataTypes.ENUM('pending', 'paid'),
-    defaultValue: 'pending',
-  },
-  specialInstructions: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  deliveryTime: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
-  assignedTo: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  invoiceId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-  },
-}, {
-  tableName: 'orders',
-  timestamps: true,
-});
+  { timestamps: true }
+);
 
-// Generate order number before create
-Order.addHook('beforeCreate', async (order) => {
-  if (!order.orderNumber) {
-    const count = await Order.count();
-    order.orderNumber = `ORD${String(count + 1).padStart(6, '0')}`;
+applyAutoIncrement(OrderSchema, { sequenceName: 'orders' });
+applySequelizeCompat(OrderSchema);
+
+OrderSchema.pre('save', async function preSave(next) {
+  try {
+    if (this.isNew && !this.orderNumber) {
+      const count = await this.constructor.countDocuments({});
+      this.orderNumber = `ORD${String(count + 1).padStart(6, '0')}`;
+    }
+    next();
+  } catch (e) {
+    next(e);
   }
 });
 
-// Define associations (must be after model definition)
-Order.belongsTo(User, {
-  foreignKey: 'hotelId',
-  as: 'hotel',
-});
-
-module.exports = Order;
+module.exports = mongoose.models.Order || mongoose.model('Order', OrderSchema);

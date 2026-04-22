@@ -1,49 +1,23 @@
-// Notification model (Sequelize)
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 const { NOTIFICATION_TYPES } = require('../config/constants');
 
-const Notification = sequelize.define('Notification', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const NotificationSchema = new mongoose.Schema(
+  {
+    type: { type: String, enum: Object.values(NOTIFICATION_TYPES), required: true },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    recipientId: { type: Number, default: null },
+    orderId: { type: Number, default: null },
+    isRead: { type: Boolean, default: false },
+    sentAt: { type: Date, default: Date.now },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
-  type: {
-    type: DataTypes.ENUM(...Object.values(NOTIFICATION_TYPES)),
-    allowNull: false,
-  },
-  title: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  message: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-  },
-  recipientId: {
-    type: DataTypes.INTEGER,
-    allowNull: true, // null means broadcast
-  },
-  orderId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-  },
-  isRead: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-  sentAt: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-  },
-  metadata: {
-    type: DataTypes.JSONB,
-    defaultValue: {},
-  },
-}, {
-  tableName: 'notifications',
-  timestamps: true,
-});
+  { timestamps: true }
+);
 
-module.exports = Notification;
+applyAutoIncrement(NotificationSchema, { sequenceName: 'notifications' });
+applySequelizeCompat(NotificationSchema);
+
+module.exports = mongoose.models.Notification || mongoose.model('Notification', NotificationSchema);

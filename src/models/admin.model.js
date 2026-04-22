@@ -1,90 +1,32 @@
-// Admin model (Sequelize)
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 
-const Admin = sequelize.define('Admin', {
-    id: {
-        type: DataTypes.INTEGER,
-        primaryKey: true,
-        autoIncrement: true,
-    },
-    username: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true,
-    },
-    mobileNumber: {
-        type: DataTypes.STRING(15),
-        allowNull: true,
-        unique: true,
-    },
-    password: {
-        type: DataTypes.STRING,
-        allowNull: false,
-    },
-    otpCode: {
-        type: DataTypes.STRING(10),
-        allowNull: true,
-    },
-    otpExpiresAt: {
-        type: DataTypes.DATE,
-        allowNull: true,
-    },
-    name: {
-        type: DataTypes.STRING,
-        allowNull: true,
-    },
-    role: {
-        type: DataTypes.STRING,
-        defaultValue: 'ADMIN',
-    },
-    email: {
-        type: DataTypes.STRING,
-        allowNull: true,
-    },
-    bio: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-    },
-    dob: {
-        type: DataTypes.DATEONLY,
-        allowNull: true,
-    },
-    country: {
-        type: DataTypes.STRING(100),
-        allowNull: true,
-    },
-    city: {
-        type: DataTypes.STRING(100),
-        allowNull: true,
-    },
-    postalCode: {
-        type: DataTypes.STRING(20),
-        allowNull: true,
-    },
-    address: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-    },
-    gstNumber: {
-        type: DataTypes.STRING(50),
-        allowNull: true,
-    },
-    businessName: {
-        type: DataTypes.STRING(200),
-        allowNull: true,
-    },
-    avatarUrl: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-    },
-    isActive: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: true,
-    },
-}, {
-    tableName: 'admins',
-    timestamps: true,
-});
+const AdminSchema = new mongoose.Schema(
+  {
+    username: { type: String, required: true, unique: true, trim: true },
+    mobileNumber: { type: String, default: null, unique: true, sparse: true },
+    password: { type: String, required: true },
+    otpCode: { type: String, default: null },
+    otpExpiresAt: { type: Date, default: null },
+    name: { type: String, default: null },
+    role: { type: String, default: 'ADMIN' },
+    email: { type: String, default: null },
+    bio: { type: String, default: null },
+    dob: { type: Date, default: null },
+    country: { type: String, default: null },
+    city: { type: String, default: null },
+    postalCode: { type: String, default: null },
+    address: { type: String, default: null },
+    gstNumber: { type: String, default: null },
+    businessName: { type: String, default: null },
+    avatarUrl: { type: String, default: null },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
 
-module.exports = Admin;
+applyAutoIncrement(AdminSchema, { sequenceName: 'admins' });
+applySequelizeCompat(AdminSchema);
+
+module.exports = mongoose.models.Admin || mongoose.model('Admin', AdminSchema);

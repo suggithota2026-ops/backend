@@ -1,6 +1,4 @@
 // Admin hotel controller
-const { Op } = require('sequelize');
-const { sequelize } = require('../../config/db');
 const User = require('../../models/user.model');
 const Order = require('../../models/order.model');
 const CustomerProductPricing = require('../../models/customer.product.pricing.model');
@@ -118,21 +116,28 @@ const getHotels = async (request, reply) => {
       where.isBlocked = isBlocked === 'true';
     }
     if (search) {
-      where[Op.or] = [
-        { hotelName: { [Op.like]: `%${search}%` } }, // Postgres use iLike if desired
-        { mobileNumber: { [Op.like]: `%${search}%` } },
-      ];
+      const re = new RegExp(String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      where.$or = [{ hotelName: re }, { mobileNumber: re }];
     }
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    const { rows: hotels, count: total } = await User.findAndCountAll({
-      where,
-      attributes: { exclude: ['otpCode', 'otpExpiresAt'] },
-      order: [['createdAt', 'DESC']],
-      offset,
-      limit: parseInt(limit),
-    });
+    const [hotels, total] = await Promise.all([
+      User.findAll({
+        where,
+        order: [['createdAt', 'DESC']],
+        offset,
+        limit: parseInt(limit),
+      }).then((rows) =>
+        rows.map((u) => {
+          const obj = u.toJSON();
+          delete obj.otpCode;
+          delete obj.otpExpiresAt;
+          return obj;
+        })
+      ),
+      User.count({ where }),
+    ]);
 
     return sendSuccess(reply, {
       hotels,
@@ -170,18 +175,10 @@ const getHotel = async (request, reply) => {
       attributes: ['id', 'productId', 'fixedPrice', 'contractStartDate', 'contractEndDate', 'isActive'],
     });
 
-    // Get order statistics
-    // Group by status and sum totalAmount
-    const orderStats = await Order.findAll({
-      where: { hotelId: id },
-      attributes: [
-        'status',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-        [sequelize.fn('SUM', sequelize.col('totalAmount')), 'totalAmount']
-      ],
-      group: ['status'],
-      raw: true,
-    });
+    const orderStats = await Order.aggregate([
+      { $match: { hotelId: Number(id) } },
+      { $group: { _id: '$status', count: { $sum: 1 }, totalAmount: { $sum: '$totalAmount' } } },
+    ]);
 
     // Remap for frontend consistency if needed, or send as is
     // The previous aggregation returned [{ _id: status, count: X, totalAmount: Y }]
@@ -193,8 +190,8 @@ const getHotel = async (request, reply) => {
         customerProductPricing: customerProductPricing.map(pricing => pricing.toJSON())
       },
       orderStats: orderStats.map(stat => ({
-        _id: stat.status, // Preserve frontend expectation if needed
-        count: parseInt(stat.count),
+        _id: stat._id,
+        count: parseInt(stat.count || 0),
         totalAmount: parseFloat(stat.totalAmount || 0),
       })),
     }, 'Hotel retrieved successfully');
@@ -336,7 +333,7 @@ const deleteHotel = async (request, reply) => {
       where: {
         hotelId: id,
         status: {
-          [Op.ne]: 'confirmed' // Not equal to 'confirmed'
+          $ne: 'confirmed',
         }
       }
     });
@@ -363,8 +360,8 @@ const getActiveCustomerPricing = async (customerId, productId) => {
         customerId,
         productId,
         isActive: true,
-        contractStartDate: { [Op.lte]: new Date() },
-        contractEndDate: { [Op.gte]: new Date() },
+        contractStartDate: { $lte: new Date() },
+        contractEndDate: { $gte: new Date() },
       },
       attributes: ['fixedPrice'],
     });

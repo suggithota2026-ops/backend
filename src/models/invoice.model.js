@@ -1,76 +1,41 @@
-// Invoice model (Sequelize)
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 const { INVOICE_STATUS } = require('../config/constants');
 
-const Invoice = sequelize.define('Invoice', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const InvoiceSchema = new mongoose.Schema(
+  {
+    invoiceNumber: { type: String, unique: true, sparse: true },
+    orderId: { type: Number, required: true, unique: true, index: true },
+    hotelId: { type: Number, required: true, index: true },
+    subtotal: { type: Number, required: true },
+    deliveryCharge: { type: Number, default: 0 },
+    gstAmount: { type: Number, default: 0 },
+    gstRate: { type: Number, default: 0 },
+    totalAmount: { type: Number, required: true },
+    status: { type: String, enum: Object.values(INVOICE_STATUS), default: INVOICE_STATUS.PENDING },
+    pdfPath: { type: String, default: null },
+    paidAt: { type: Date, default: null },
   },
-  invoiceNumber: {
-    type: DataTypes.STRING,
-    unique: true,
-  },
-  orderId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    unique: true,
-  },
-  hotelId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  subtotal: {
-    type: DataTypes.DECIMAL(12, 2),
-    allowNull: false,
-  },
-  deliveryCharge: {
-    type: DataTypes.DECIMAL(12, 2),
-    defaultValue: 0,
-  },
-  gstAmount: {
-    type: DataTypes.DECIMAL(12, 2),
-    defaultValue: 0,
-  },
-  gstRate: {
-    type: DataTypes.DECIMAL(5, 2),
-    defaultValue: 0,
-  },
-  totalAmount: {
-    type: DataTypes.DECIMAL(12, 2),
-    allowNull: false,
-  },
-  status: {
-    type: DataTypes.ENUM(...Object.values(INVOICE_STATUS)),
-    defaultValue: INVOICE_STATUS.PENDING,
-  },
-  pdfPath: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  paidAt: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
-}, {
-  tableName: 'invoices',
-  timestamps: true,
-});
+  { timestamps: true }
+);
 
-// Generate invoice number before create
-Invoice.addHook('beforeCreate', async (invoice) => {
-  if (!invoice.invoiceNumber) {
-    const year = new Date().getFullYear();
-    const count = await Invoice.count({
-      where: sequelize.where(
-        sequelize.fn('EXTRACT', sequelize.literal('YEAR FROM "createdAt"')),
-        year
-      ),
-    });
-    invoice.invoiceNumber = `INV${year}${String(count + 1).padStart(5, '0')}`;
+applyAutoIncrement(InvoiceSchema, { sequenceName: 'invoices' });
+applySequelizeCompat(InvoiceSchema);
+
+InvoiceSchema.pre('save', async function preSave(next) {
+  try {
+    if (this.isNew && !this.invoiceNumber) {
+      const year = new Date().getFullYear();
+      const count = await this.constructor.countDocuments({
+        createdAt: { $gte: new Date(`${year}-01-01T00:00:00.000Z`), $lt: new Date(`${year + 1}-01-01T00:00:00.000Z`) },
+      });
+      this.invoiceNumber = `INV${year}${String(count + 1).padStart(5, '0')}`;
+    }
+    next();
+  } catch (e) {
+    next(e);
   }
 });
 
-module.exports = Invoice;
+module.exports = mongoose.models.Invoice || mongoose.model('Invoice', InvoiceSchema);

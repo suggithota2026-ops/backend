@@ -1,76 +1,29 @@
-// Product model (Sequelize)
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 const { PRODUCT_STATUS } = require('../config/constants');
 
-const Product = sequelize.define('Product', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const ProductSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    description: { type: String, default: null },
+    categoryId: { type: Number, required: true, index: true },
+    subcategory: { type: String, default: null },
+    images: { type: [String], default: [] },
+    price: { type: Number, required: true },
+    pricingType: { type: String, enum: ['fixed', 'daily', 'weekly'], default: 'fixed' },
+    unit: { type: String, default: 'kg' },
+    stock: { type: Number, default: 0 },
+    minStockLevel: { type: Number, default: 0 },
+    status: { type: String, enum: Object.values(PRODUCT_STATUS), default: PRODUCT_STATUS.ACTIVE },
+    isActive: { type: Boolean, default: true },
+    displayOrder: { type: Number, default: 0 },
+    createdById: { type: Number, default: null },
   },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  categoryId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  subcategory: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  images: {
-    // store array of image paths as JSON
-    type: DataTypes.JSONB,
-    allowNull: true,
-  },
-  price: {
-    type: DataTypes.DECIMAL(12, 2),
-    allowNull: false,
-  },
-  pricingType: {
-    type: DataTypes.ENUM('fixed', 'daily', 'weekly'),
-    defaultValue: 'fixed',
-    allowNull: false,
-  },
-  unit: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    defaultValue: 'kg',
-  },
-  stock: {
-    type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 0,
-  },
-  minStockLevel: {
-    type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 0,
-  },
-  status: {
-    type: DataTypes.ENUM(...Object.values(PRODUCT_STATUS)),
-    defaultValue: PRODUCT_STATUS.ACTIVE,
-  },
-  isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
-  },
-  displayOrder: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-  },
-  createdById: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-  },
-}, {
-  tableName: 'products',
-  timestamps: true,
-});
+  { timestamps: true }
+);
 
-module.exports = Product;
+applyAutoIncrement(ProductSchema, { sequenceName: 'products' });
+applySequelizeCompat(ProductSchema);
+
+module.exports = mongoose.models.Product || mongoose.model('Product', ProductSchema);

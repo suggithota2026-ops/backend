@@ -1,6 +1,4 @@
 // User profile controller
-const { Op } = require('sequelize');
-const { sequelize } = require('../../config/db');
 const User = require('../../models/user.model');
 const Order = require('../../models/order.model');
 const Notification = require('../../models/notification.model');
@@ -19,22 +17,16 @@ const getProfile = async (request, reply) => {
     }
 
     // Get order statistics
-    // Group by status and count
-    const orderStats = await Order.findAll({
-      where: { hotelId: userId },
-      attributes: [
-        'status',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-      ],
-      group: ['status'],
-      raw: true,
-    });
+    const orderStats = await Order.aggregate([
+      { $match: { hotelId: Number(userId) } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]);
 
     return sendSuccess(reply, {
       user,
       orderStats: orderStats.map(stat => ({
-        _id: stat.status, // Preserve frontend expectation
-        count: parseInt(stat.count),
+        _id: stat._id,
+        count: parseInt(stat.count || 0),
       })),
     }, 'Profile retrieved successfully');
   } catch (error) {
@@ -74,47 +66,39 @@ const getNotifications = async (request, reply) => {
     const userId = request.user.id;
     const { page = 1, limit = 20, isRead } = request.query;
 
-    const where = {
-      [Op.and]: [
+    const baseWhere = {
+      type: { $ne: 'offer' },
+      $or: [
+        { recipientId: Number(userId) },
         {
-          type: {
-            [Op.ne]: 'offer' // Exclude offers (handled by separate endpoint)
-          }
+          recipientId: null,
+          type: { $nin: ['new_order', 'order_cancelled', 'admin_message'] },
         },
-        {
-          [Op.or]: [
-            { recipientId: userId },
-            {
-              recipientId: null, // Broadcast notifications
-              type: {
-                [Op.notIn]: ['new_order', 'order_cancelled', 'admin_message'] // Exclude admin-specific notifications
-              }
-            },
-          ],
-        }
-      ]
+      ],
     };
-
-    if (isRead !== undefined) {
-      where.isRead = isRead === 'true';
-    }
+    if (isRead !== undefined) baseWhere.isRead = isRead === 'true';
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    const { rows: notifications, count: total } = await Notification.findAndCountAll({
-      where,
-      include: [{
-        model: Order,
-        as: 'order', // Ensure association exists in models
-        attributes: ['orderNumber'],
-      }],
-      order: [['sentAt', 'DESC']],
-      offset,
-      limit: parseInt(limit),
+    const [notifications, total] = await Promise.all([
+      Notification.find(baseWhere).sort({ sentAt: -1 }).skip(offset).limit(parseInt(limit)).exec(),
+      Notification.countDocuments(baseWhere).exec(),
+    ]);
+
+    const orderIds = [...new Set(notifications.map(n => n.orderId).filter(Boolean))];
+    const orders = orderIds.length
+      ? await Order.findAll({ where: { id: { $in: orderIds } }, attributes: ['id', 'orderNumber'] })
+      : [];
+    const orderMap = new Map(orders.map(o => [o.id, o]));
+
+    const enriched = notifications.map(n => {
+      const obj = n.toJSON();
+      if (obj.orderId) obj.order = orderMap.get(obj.orderId) || null;
+      return obj;
     });
 
     return sendSuccess(reply, {
-      notifications,
+      notifications: enriched,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -135,25 +119,12 @@ const markNotificationAsRead = async (request, reply) => {
 
     const notification = await Notification.findOne({
       where: {
-        id,
-        [Op.and]: [
-          {
-            type: {
-              [Op.ne]: 'offer' // Exclude offers (handled by separate endpoint)
-            }
-          },
-          {
-            [Op.or]: [
-              { recipientId: userId },
-              {
-                recipientId: null,
-                type: {
-                  [Op.notIn]: ['new_order', 'order_cancelled', 'admin_message'] // Exclude admin-specific notifications
-                }
-              },
-            ],
-          }
-        ]
+        id: Number(id),
+        type: { $ne: 'offer' },
+        $or: [
+          { recipientId: Number(userId) },
+          { recipientId: null, type: { $nin: ['new_order', 'order_cancelled', 'admin_message'] } },
+        ],
       },
     });
 
@@ -161,7 +132,6 @@ const markNotificationAsRead = async (request, reply) => {
       return sendError(reply, 'Notification not found', 404);
     }
 
-    // Sequelize update
     await notification.update({ isRead: true });
 
     return sendSuccess(reply, notification, 'Notification marked as read');

@@ -1,6 +1,4 @@
 // User offer controller
-const { Op } = require('sequelize');
-const { sequelize } = require('../../config/db');
 const Notification = require('../../models/notification.model');
 const Order = require('../../models/order.model');
 const { sendSuccess, sendError } = require('../../utils/response');
@@ -13,10 +11,7 @@ const getOffers = async (request, reply) => {
 
     const where = {
       type: 'offer', // Only fetch offer notifications
-      [Op.or]: [
-        { recipientId: userId }, // Offers specifically for this user
-        { recipientId: null },   // Broadcast offers for all users
-      ],
+      $or: [{ recipientId: Number(userId) }, { recipientId: null }],
     };
 
     if (isRead !== undefined) {
@@ -27,19 +22,21 @@ const getOffers = async (request, reply) => {
 
     const { rows: offers, count: total } = await Notification.findAndCountAll({
       where,
-      include: [{
-        model: Order,
-        as: 'order',
-        attributes: ['orderNumber'],
-      }],
       order: [['sentAt', 'DESC']],
       offset,
       limit: parseInt(limit),
     });
 
+    const orderIds = [...new Set(offers.map(o => o.orderId).filter(Boolean))];
+    const orders = orderIds.length
+      ? await Order.findAll({ where: { id: { $in: orderIds } }, attributes: ['id', 'orderNumber'] })
+      : [];
+    const orderMap = new Map(orders.map(o => [o.id, o]));
+
     // Enhance offers with additional information from metadata
     const enhancedOffers = offers.map(offer => {
       const enhancedOffer = offer.toJSON();
+      if (enhancedOffer.orderId) enhancedOffer.order = orderMap.get(enhancedOffer.orderId) || null;
       
       // Extract offer details from metadata
       const metadata = enhancedOffer.metadata || {};

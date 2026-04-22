@@ -1,80 +1,29 @@
-// Hotel/User model (Sequelize)
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 const { ROLES } = require('../config/constants');
 
-const User = sequelize.define('User', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const UserSchema = new mongoose.Schema(
+  {
+    mobileNumber: { type: String, required: true, unique: true, trim: true },
+    otpCode: { type: String, default: null },
+    otpExpiresAt: { type: Date, default: null },
+    isVerified: { type: Boolean, default: false },
+    role: { type: String, enum: Object.values(ROLES), default: ROLES.HOTEL },
+    hotelName: { type: String, default: null },
+    address: { type: String, default: null },
+    gstNumber: { type: String, default: null },
+    creditLimit: { type: Number, default: 0 },
+    isBlocked: { type: Boolean, default: false },
+    fcmToken: { type: String, default: null },
+    lastLoginAt: { type: Date, default: null },
+    rateType: { type: String, default: null },
+    pricePerUnit: { type: Number, default: null },
   },
-  mobileNumber: {
-    type: DataTypes.STRING(15),
-    allowNull: false,
-    unique: true,
-  },
-  otpCode: {
-    type: DataTypes.STRING(10),
-    allowNull: true,
-  },
-  otpExpiresAt: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
-  isVerified: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-  role: {
-    type: DataTypes.ENUM(...Object.values(ROLES)),
-    defaultValue: ROLES.HOTEL,
-  },
-  hotelName: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  address: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  gstNumber: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  creditLimit: {
-    type: DataTypes.DECIMAL(12, 2),
-    defaultValue: 0,
-  },
-  isBlocked: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-  fcmToken: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  lastLoginAt: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
-  rateType: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-  },
-  pricePerUnit: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true,
-  },
-}, {
-  tableName: 'users',
-  timestamps: true,
-});
+  { timestamps: true }
+);
 
-// Add association for customer product pricing
-User.hasMany(require('./customer.product.pricing.model'), {
-  foreignKey: 'customerId',
-  as: 'customerProductPricing'
-});
+applyAutoIncrement(UserSchema, { sequenceName: 'users' });
+applySequelizeCompat(UserSchema);
 
-module.exports = User;
+module.exports = mongoose.models.User || mongoose.model('User', UserSchema);

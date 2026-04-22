@@ -1,6 +1,4 @@
 // Admin notifications controller
-const { Op, col } = require('sequelize');
-const { sequelize } = require('../../config/db');
 const Notification = require('../../models/notification.model');
 const Order = require('../../models/order.model');
 const Category = require('../../models/category.model');
@@ -17,14 +15,7 @@ const getNotifications = async (request, reply) => {
         const { NOTIFICATION_TYPES } = require('../../config/constants');
 
         const where = {
-            type: {
-                [Op.in]: [  // Only show notifications that originate from user actions
-                    'new_order',        // When a user places a new order
-                    'order_cancelled',  // When a user cancels an order
-                    'admin_message',    // Admin messages (like contact inquiries)
-                    'broadcast'       // General broadcast notifications
-                ],
-            },
+            type: { $in: ['new_order', 'order_cancelled', 'admin_message', 'broadcast'] },
         };
 
         if (isRead !== undefined) {
@@ -35,18 +26,25 @@ const getNotifications = async (request, reply) => {
 
         const { rows: notifications, count: total } = await Notification.findAndCountAll({
             where,
-            include: [{
-                model: Order,
-                as: 'order',
-                attributes: ['orderNumber', 'totalAmount'],
-            }],
             order: [['sentAt', 'DESC']],
             offset,
             limit: parseInt(limit),
         });
 
+        const orderIds = [...new Set(notifications.map(n => n.orderId).filter(Boolean))];
+        const orders = orderIds.length
+          ? await Order.findAll({ where: { id: { $in: orderIds } }, attributes: ['id', 'orderNumber', 'totalAmount'] })
+          : [];
+        const orderMap = new Map(orders.map(o => [o.id, o]));
+
+        const enriched = notifications.map(n => {
+          const obj = n.toJSON();
+          if (obj.orderId) obj.order = orderMap.get(obj.orderId) || null;
+          return obj;
+        });
+
         return sendSuccess(reply, {
-            notifications,
+            notifications: enriched,
             pagination: {
                 page: parseInt(page),
                 limit: parseInt(limit),
@@ -256,92 +254,7 @@ const markAsRead = async (request, reply) => {
     }
 };
 
-const validateCoupon = async (request, reply) => {
-    try {
-        const { code } = request.body;
-        
-        if (!code) {
-            return sendError(reply, 'Coupon code is required', 400);
-        }
-        
-        // Find active coupon with the given code
-        const coupon = await Coupon.findOne({
-            where: {
-                code: code.toUpperCase(),
-                isActive: true,
-                validFrom: { [Op.lte]: new Date() },
-                validUntil: { [Op.gte]: new Date() },
-                [Op.or]: [
-                    { usageLimit: null }, // Unlimited usage
-                    { [Op.col]: 'usedCount', [Op.lt]: sequelize.col('usageLimit') }, // Within usage limit
-                ]
-            }
-        });
-        
-        if (!coupon) {
-            return sendError(reply, 'Invalid or expired coupon code', 404);
-        }
-        
-        // Return coupon details
-        return sendSuccess(reply, {
-            code: coupon.code,
-            discountType: coupon.discountType,
-            discountValue: parseFloat(coupon.discountValue),
-            validUntil: coupon.validUntil,
-            minOrderAmount: parseFloat(coupon.minOrderAmount || 0),
-            maxDiscountAmount: coupon.maxDiscountAmount ? parseFloat(coupon.maxDiscountAmount) : null,
-        }, 'Coupon validated successfully');
-        
-    } catch (error) {
-        logger.error('Error validating coupon:', error);
-        return sendError(reply, 'Failed to validate coupon', 500);
-    }
-};
-
-const redeemCoupon = async (request, reply) => {
-    try {
-        const { code } = request.body;
-        
-        if (!code) {
-            return sendError(reply, 'Coupon code is required', 400);
-        }
-        
-        // Find active coupon with the given code
-        const coupon = await Coupon.findOne({
-            where: {
-                code: code.toUpperCase(),
-                isActive: true,
-                validFrom: { [Op.lte]: new Date() },
-                validUntil: { [Op.gte]: new Date() },
-                [Op.or]: [
-                    { usageLimit: null }, // Unlimited usage
-                    { [Op.col]: 'usedCount', [Op.lt]: sequelize.col('usageLimit') }, // Within usage limit
-                ]
-            }
-        });
-        
-        if (!coupon) {
-            return sendError(reply, 'Invalid or expired coupon code', 404);
-        }
-        
-        // Increment used count
-        await coupon.increment('usedCount');
-        
-        // Return coupon details
-        return sendSuccess(reply, {
-            code: coupon.code,
-            discountType: coupon.discountType,
-            discountValue: parseFloat(coupon.discountValue),
-            validUntil: coupon.validUntil,
-            minOrderAmount: parseFloat(coupon.minOrderAmount || 0),
-            maxDiscountAmount: coupon.maxDiscountAmount ? parseFloat(coupon.maxDiscountAmount) : null,
-        }, 'Coupon redeemed successfully');
-        
-    } catch (error) {
-        logger.error('Error redeeming coupon:', error);
-        return sendError(reply, 'Failed to redeem coupon', 500);
-    }
-};
+// validateCoupon / redeemCoupon exist in user coupon controller; keep admin file focused on notifications
 
 module.exports = {
     getNotifications,

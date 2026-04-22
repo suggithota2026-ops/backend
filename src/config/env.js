@@ -7,18 +7,18 @@ module.exports = {
   NODE_ENV,
   PORT: process.env.PORT || 3001,
 
-  // PostgreSQL
-  DATABASE_URL: process.env.DATABASE_URL || null,
-  DB_HOST: process.env.DB_HOST || 'localhost',
-  DB_PORT: parseInt(process.env.DB_PORT || '5432', 10),
-  DB_NAME: process.env.DB_NAME || 'prk_smiles',
-  DB_USER: process.env.DB_USER || 'postgres',
-  DB_PASSWORD: process.env.DB_PASSWORD || '',
-  DB_DIALECT: process.env.DB_DIALECT || 'postgres',
+  // MongoDB
+  MONGODB_URI: process.env.MONGODB_URI || process.env.DATABASE_URL || '',
 
   // Auth
   JWT_SECRET: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
+
+  // Default Admin seed (optional)
+  DEFAULT_ADMIN_MOBILE: process.env.DEFAULT_ADMIN_MOBILE || '',
+  DEFAULT_ADMIN_USERNAME: process.env.DEFAULT_ADMIN_USERNAME || 'admin',
+  DEFAULT_ADMIN_PASSWORD: process.env.DEFAULT_ADMIN_PASSWORD || '123456',
+  DEFAULT_ADMIN_NAME: process.env.DEFAULT_ADMIN_NAME || 'Admin',
 
   // Firebase
   FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT || '',

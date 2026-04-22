@@ -1,7 +1,4 @@
 // User coupon controller
-const { Op } = require('sequelize');
-const { col } = require('sequelize');
-const { sequelize } = require('../../config/db');
 const Coupon = require('../../models/coupon.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
@@ -14,22 +11,24 @@ const validateCoupon = async (request, reply) => {
             return sendError(reply, 'Coupon code is required', 400);
         }
         
-        // Find active coupon with the given code
+        const now = new Date();
         const coupon = await Coupon.findOne({
             where: {
                 code: code.toUpperCase(),
                 isActive: true,
-                validFrom: { [Op.lte]: new Date() },
-                validUntil: { [Op.gte]: new Date() },
-                [Op.or]: [
-                    { usageLimit: null }, // Unlimited usage
-                    sequelize.where(sequelize.col('usedCount'), Op.lt, sequelize.col('usageLimit')) // Within usage limit
-                ]
-            }
+                validFrom: { $lte: now },
+                validUntil: { $gte: now },
+            },
         });
         
         if (!coupon) {
             return sendError(reply, 'Invalid or expired coupon code', 404);
+        }
+
+        if (coupon.usageLimit !== null && coupon.usageLimit !== undefined) {
+            if ((coupon.usedCount || 0) >= coupon.usageLimit) {
+                return sendError(reply, 'Coupon usage limit exceeded', 400);
+            }
         }
         
         // Return coupon details
@@ -56,22 +55,24 @@ const redeemCoupon = async (request, reply) => {
             return sendError(reply, 'Coupon code is required', 400);
         }
         
-        // Find active coupon with the given code
+        const now = new Date();
         const coupon = await Coupon.findOne({
             where: {
                 code: code.toUpperCase(),
                 isActive: true,
-                validFrom: { [Op.lte]: new Date() },
-                validUntil: { [Op.gte]: new Date() },
-                [Op.or]: [
-                    { usageLimit: null }, // Unlimited usage
-                    sequelize.where(sequelize.col('usedCount'), Op.lt, sequelize.col('usageLimit')) // Within usage limit
-                ]
-            }
+                validFrom: { $lte: now },
+                validUntil: { $gte: now },
+            },
         });
         
         if (!coupon) {
             return sendError(reply, 'Invalid or expired coupon code', 404);
+        }
+
+        if (coupon.usageLimit !== null && coupon.usageLimit !== undefined) {
+            if ((coupon.usedCount || 0) >= coupon.usageLimit) {
+                return sendError(reply, 'Coupon usage limit exceeded', 400);
+            }
         }
         
         // Increment used count

@@ -69,7 +69,6 @@ const createCategory = async (request, reply) => {
 const getCategories = async (request, reply) => {
   try {
     const { isActive } = request.query;
-    const { sequelize } = require('../../config/db');
 
     const query = {};
     if (isActive !== undefined) {
@@ -78,23 +77,22 @@ const getCategories = async (request, reply) => {
 
     const categories = await Category.findAll({
       where: query,
-      attributes: {
-        include: [
-          [
-            sequelize.literal(`(
-              SELECT COUNT(*)
-              FROM products AS product
-              WHERE
-                product."categoryId" = "Category".id
-            )`),
-            'products'
-          ]
-        ]
-      },
       order: [['displayOrder', 'ASC'], ['createdAt', 'DESC']],
     });
 
-    return sendSuccess(reply, categories, 'Categories retrieved successfully');
+    const categoryIds = categories.map(c => c.id);
+    const products = categoryIds.length
+      ? await Product.aggregate([{ $match: { categoryId: { $in: categoryIds } } }, { $group: { _id: '$categoryId', count: { $sum: 1 } } }])
+      : [];
+    const countMap = new Map(products.map(p => [p._id, p.count]));
+
+    const enriched = categories.map(c => {
+      const obj = c.toJSON();
+      obj.products = countMap.get(obj.id) || 0;
+      return obj;
+    });
+
+    return sendSuccess(reply, enriched, 'Categories retrieved successfully');
   } catch (error) {
     logger.error('Error fetching categories:', error);
     return sendError(reply, 'Failed to fetch categories', 500);
@@ -105,33 +103,22 @@ const getCategory = async (request, reply) => {
   try {
     const { id } = request.params;
     const categoryId = parseInt(id);
-    const { sequelize } = require('../../config/db');
 
     if (isNaN(categoryId)) {
       return sendError(reply, 'Invalid category ID', 400);
     }
 
     const category = await Category.findByPk(categoryId, {
-      attributes: {
-        include: [
-          [
-            sequelize.literal(`(
-              SELECT COUNT(*)
-              FROM products AS product
-              WHERE
-                product."categoryId" = "Category".id
-            )`),
-            'products'
-          ]
-        ]
-      }
     });
 
     if (!category) {
       return sendError(reply, 'Category not found', 404);
     }
 
-    return sendSuccess(reply, category, 'Category retrieved successfully');
+    const productsCount = await Product.count({ where: { categoryId } });
+    const obj = category.toJSON();
+    obj.products = productsCount;
+    return sendSuccess(reply, obj, 'Category retrieved successfully');
   } catch (error) {
     logger.error('Error fetching category:', error);
     return sendError(reply, 'Failed to fetch category', 500);

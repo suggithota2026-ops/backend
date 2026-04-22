@@ -20,8 +20,8 @@ const rateLimit = require('./middlewares/rateLimit.middleware');
 const { PORT, NODE_ENV } = require('./config/env');
 const { initializeFirebase } = require('./config/firebase');
 const { connectDB } = require('./config/db');
-const { runSchemaMigration } = require('./utils/schema-migration');
 const logger = require('./utils/logger');
+const { seedDefaultAdmin } = require('./utils/seedDefaultAdmin');
 
 
 // ===============================
@@ -34,7 +34,7 @@ const start = async () => {
     // -------------------------------
     initializeFirebase();
     await connectDB();
-    await runSchemaMigration();
+    await seedDefaultAdmin();
 
     // -------------------------------
     // Register Plugins

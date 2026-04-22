@@ -1,6 +1,4 @@
 // Admin offer controller
-const { Op } = require('sequelize');
-const { sequelize } = require('../../config/db');
 const Coupon = require('../../models/coupon.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
@@ -13,10 +11,11 @@ const getAllOffers = async (request, reply) => {
     const where = {};
     
     if (searchTerm) {
-      where[Op.or] = [
-        { code: { [Op.iLike]: `%${searchTerm}%` } },
-        { '$metadata.offerTitle$': { [Op.iLike]: `%${searchTerm}%` } },
-        { '$metadata.offerDescription$': { [Op.iLike]: `%${searchTerm}%` } },
+      const re = new RegExp(String(searchTerm).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      where.$or = [
+        { code: re },
+        { 'metadata.offerTitle': re },
+        { 'metadata.offerDescription': re },
       ];
     }
 
@@ -171,10 +170,11 @@ const getAdminOffers = async (request, reply) => {
     const where = {};
     
     if (searchTerm) {
-      where[Op.or] = [
-        { code: { [Op.iLike]: `%${searchTerm}%` } },
-        { '$metadata.offerTitle$': { [Op.iLike]: `%${searchTerm}%` } },
-        { '$metadata.offerDescription$': { [Op.iLike]: `%${searchTerm}%` } },
+      const re = new RegExp(String(searchTerm).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      where.$or = [
+        { code: re },
+        { 'metadata.offerTitle': re },
+        { 'metadata.offerDescription': re },
       ];
     }
 
@@ -184,15 +184,7 @@ const getAdminOffers = async (request, reply) => {
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    // Define the sort order based on parameters
-    let orderField = sortBy;
-    if (sortBy === 'usedCount') {
-      orderField = [sequelize.col('usedCount'), sortOrder];
-    } else if (sortBy === 'validUntil') {
-      orderField = [sequelize.col('validUntil'), sortOrder];
-    } else {
-      orderField = [[sortBy, sortOrder]];
-    }
+    const orderField = [[sortBy, String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC']];
 
     const { rows: offers, count: total } = await Coupon.findAndCountAll({
       where,

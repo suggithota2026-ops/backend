@@ -1,73 +1,27 @@
-// Coupon model (Sequelize)
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { mongoose } = require('../config/db');
+const { applyAutoIncrement } = require('./_autoIncrement');
+const { applySequelizeCompat } = require('./_sequelizeCompat');
 
-const Coupon = sequelize.define('Coupon', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const CouponSchema = new mongoose.Schema(
+  {
+    code: { type: String, required: true, unique: true, trim: true },
+    discountType: { type: String, enum: ['percentage', 'flat'], required: true },
+    discountValue: { type: Number, required: true },
+    validFrom: { type: Date, default: Date.now },
+    validUntil: { type: Date, required: true },
+    minOrderAmount: { type: Number, default: 0 },
+    maxDiscountAmount: { type: Number, default: null },
+    usageLimit: { type: Number, default: null },
+    usedCount: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
+    createdBy: { type: Number, default: null },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    orderId: { type: Number, default: null, index: true },
   },
-  code: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-  },
-  discountType: {
-    type: DataTypes.ENUM('percentage', 'flat'),
-    allowNull: false,
-  },
-  discountValue: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-  },
-  validFrom: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-  },
-  validUntil: {
-    type: DataTypes.DATE,
-    allowNull: false,
-  },
-  minOrderAmount: {
-    type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 0,
-  },
-  maxDiscountAmount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true,
-  },
-  usageLimit: {
-    type: DataTypes.INTEGER,
-    defaultValue: null, // null means unlimited
-  },
-  usedCount: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-  },
-  isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
-  },
-  createdBy: {
-    type: DataTypes.INTEGER, // Admin ID
-    allowNull: true,
-  },
-  metadata: {
-    type: DataTypes.JSONB,
-    defaultValue: {},
-  },
-  orderId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'orders',
-      key: 'id'
-    }
-  },
-}, {
-  tableName: 'coupons',
-  timestamps: true,
-});
+  { timestamps: true }
+);
 
-module.exports = Coupon;
+applyAutoIncrement(CouponSchema, { sequenceName: 'coupons' });
+applySequelizeCompat(CouponSchema);
+
+module.exports = mongoose.models.Coupon || mongoose.model('Coupon', CouponSchema);

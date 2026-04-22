@@ -1,9 +1,7 @@
-// Report service
-const { Op, fn, col, literal } = require('sequelize');
+// Report service (MongoDB)
 const Order = require('../models/order.model');
 const Invoice = require('../models/invoice.model');
 const User = require('../models/user.model');
-const { sequelize } = require('../config/db');
 const { getStartOfDay, getEndOfDay, getStartOfWeek, getEndOfWeek, getStartOfMonth, getEndOfMonth } = require('../utils/date');
 const { ORDER_STATUS } = require('../config/constants');
 
@@ -16,63 +14,53 @@ const getDashboardStats = async () => {
     pendingOrders,
     completedOrders,
     todaySalesResult,
-    topHotels,
+    topHotelsAgg,
     recentOrders,
   ] = await Promise.all([
     Order.count(),
     Order.count({ where: { status: ORDER_STATUS.PENDING } }),
     Order.count({ where: { status: ORDER_STATUS.DELIVERED } }),
-    sequelize.query(`
-      SELECT COALESCE(SUM("totalAmount"), 0)::numeric as total
-      FROM invoices
-      WHERE "createdAt" >= :start AND "createdAt" <= :end
-        AND status = 'generated'
-    `, {
-      replacements: { start: todayStart, end: todayEnd },
-      type: sequelize.QueryTypes.SELECT,
-    }).then(result => {
-      const row = result[0] || { total: 0 };
-      return { total: parseFloat(row.total || 0) };
-    }),
-    sequelize.query(`
-      SELECT 
-        u."hotelName",
-        COUNT(o.id) as "orderCount",
-        SUM(o."totalAmount")::numeric as "totalAmount"
-      FROM orders o
-      INNER JOIN users u ON o."hotelId" = u.id
-      WHERE o.status = :status
-      GROUP BY u.id, u."hotelName"
-      ORDER BY "orderCount" DESC
-      LIMIT 10
-    `, {
-      replacements: { status: ORDER_STATUS.DELIVERED },
-      type: sequelize.QueryTypes.SELECT,
-    }),
+    Invoice.aggregate([
+      { $match: { createdAt: { $gte: todayStart, $lte: todayEnd }, status: 'generated' } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+    ]).then((rows) => ({ total: rows?.[0]?.total || 0 })),
+    Order.aggregate([
+      { $match: { status: ORDER_STATUS.DELIVERED } },
+      { $group: { _id: '$hotelId', orderCount: { $sum: 1 }, totalAmount: { $sum: '$totalAmount' } } },
+      { $sort: { orderCount: -1 } },
+      { $limit: 10 },
+    ]),
     Order.findAll({
       limit: 5,
       order: [['createdAt', 'DESC']],
-      include: [{
-        model: User,
-        as: 'hotel',
-        attributes: ['hotelName']
-      }]
     })
   ]);
+
+  const topHotelIds = (topHotelsAgg || []).map((h) => h._id);
+  const topHotelsUsers = topHotelIds.length
+    ? await User.findAll({ where: { id: { $in: topHotelIds } }, attributes: ['id', 'hotelName'] })
+    : [];
+  const topHotelMap = new Map(topHotelsUsers.map((u) => [u.id, u.hotelName]));
+
+  const recentHotelIds = [...new Set((recentOrders || []).map((o) => o.hotelId))];
+  const recentHotels = recentHotelIds.length
+    ? await User.findAll({ where: { id: { $in: recentHotelIds } }, attributes: ['id', 'hotelName'] })
+    : [];
+  const recentHotelMap = new Map(recentHotels.map((u) => [u.id, u.hotelName]));
 
   return {
     totalOrders,
     pendingOrders,
     completedOrders,
     todaySales: parseFloat(todaySalesResult.total || 0),
-    topHotels: topHotels.map(h => ({
-      hotelName: h.hotelName,
+    topHotels: (topHotelsAgg || []).map(h => ({
+      hotelName: topHotelMap.get(h._id) || `Hotel #${h._id}`,
       orderCount: parseInt(h.orderCount),
-      totalAmount: parseFloat(h.totalAmount),
+      totalAmount: parseFloat(h.totalAmount || 0),
     })),
-    recentOrders: recentOrders.map(o => ({
+    recentOrders: (recentOrders || []).map(o => ({
       id: o.id,
-      customer: o.hotel?.hotelName || `Hotel #${o.hotelId}`,
+      customer: recentHotelMap.get(o.hotelId) || `Hotel #${o.hotelId}`,
       amount: `₹${parseFloat(o.totalAmount).toLocaleString()}`,
       status: o.status,
       date: new Date(o.createdAt).toLocaleDateString(),
@@ -87,7 +75,7 @@ const getDailyReport = async (date = new Date()) => {
 
   const orders = await Order.findAll({
     where: {
-      createdAt: { [Op.gte]: start, [Op.lte]: end },
+      createdAt: { $gte: start, $lte: end },
     },
     order: [['createdAt', 'DESC']],
   });
@@ -95,7 +83,7 @@ const getDailyReport = async (date = new Date()) => {
   // Get hotel names for orders
   const hotelIds = [...new Set(orders.map(o => o.hotelId))];
   const hotels = await User.findAll({
-    where: { id: { [Op.in]: hotelIds } },
+    where: { id: { $in: hotelIds } },
     attributes: ['id', 'hotelName'],
   });
   const hotelMap = new Map(hotels.map(h => [h.id, h.hotelName]));
@@ -107,13 +95,8 @@ const getDailyReport = async (date = new Date()) => {
 
   const invoices = await Invoice.findAll({
     where: {
-      createdAt: { [Op.gte]: start, [Op.lte]: end },
+      createdAt: { $gte: start, $lte: end },
     },
-    include: [{
-      model: User,
-      as: 'hotel',
-      attributes: ['hotelName']
-    }]
   });
 
   const totalSales = invoices.reduce((sum, inv) => sum + parseFloat(inv.totalAmount), 0);
@@ -134,7 +117,7 @@ const getWeeklyReport = async (date = new Date()) => {
 
   const orders = await Order.findAll({
     where: {
-      createdAt: { [Op.gte]: start, [Op.lte]: end },
+      createdAt: { $gte: start, $lte: end },
     },
     order: [['createdAt', 'DESC']],
   });
@@ -142,7 +125,7 @@ const getWeeklyReport = async (date = new Date()) => {
   // Get hotel names for orders
   const hotelIds = [...new Set(orders.map(o => o.hotelId))];
   const hotels = await User.findAll({
-    where: { id: { [Op.in]: hotelIds } },
+    where: { id: { $in: hotelIds } },
     attributes: ['id', 'hotelName'],
   });
   const hotelMap = new Map(hotels.map(h => [h.id, h.hotelName]));
@@ -154,13 +137,8 @@ const getWeeklyReport = async (date = new Date()) => {
 
   const invoices = await Invoice.findAll({
     where: {
-      createdAt: { [Op.gte]: start, [Op.lte]: end },
+      createdAt: { $gte: start, $lte: end },
     },
-    include: [{
-      model: User,
-      as: 'hotel',
-      attributes: ['hotelName']
-    }]
   });
 
   const totalSales = invoices.reduce((sum, inv) => sum + parseFloat(inv.totalAmount), 0);
@@ -181,7 +159,7 @@ const getMonthlyReport = async (date = new Date()) => {
 
   const orders = await Order.findAll({
     where: {
-      createdAt: { [Op.gte]: start, [Op.lte]: end },
+      createdAt: { $gte: start, $lte: end },
     },
     order: [['createdAt', 'DESC']],
   });
@@ -189,7 +167,7 @@ const getMonthlyReport = async (date = new Date()) => {
   // Get hotel names for orders
   const hotelIds = [...new Set(orders.map(o => o.hotelId))];
   const hotels = await User.findAll({
-    where: { id: { [Op.in]: hotelIds } },
+    where: { id: { $in: hotelIds } },
     attributes: ['id', 'hotelName'],
   });
   const hotelMap = new Map(hotels.map(h => [h.id, h.hotelName]));
@@ -201,32 +179,23 @@ const getMonthlyReport = async (date = new Date()) => {
 
   const invoices = await Invoice.findAll({
     where: {
-      createdAt: { [Op.gte]: start, [Op.lte]: end },
+      createdAt: { $gte: start, $lte: end },
     },
-    include: [{
-      model: User,
-      as: 'hotel',
-      attributes: ['hotelName']
-    }]
   });
 
   const totalSales = invoices.reduce((sum, inv) => sum + parseFloat(inv.totalAmount), 0);
 
-  // Group by hotel
-  const hotelStats = await sequelize.query(`
-    SELECT 
-      u."hotelName",
-      COUNT(o.id) as "orderCount",
-      SUM(o."totalAmount")::numeric as "totalAmount"
-    FROM orders o
-    INNER JOIN users u ON o."hotelId" = u.id
-    WHERE o."createdAt" >= :start AND o."createdAt" <= :end
-    GROUP BY u.id, u."hotelName"
-    ORDER BY "orderCount" DESC
-  `, {
-    replacements: { start, end },
-    type: sequelize.QueryTypes.SELECT,
-  });
+  const hotelStatsAgg = await Order.aggregate([
+    { $match: { createdAt: { $gte: start, $lte: end } } },
+    { $group: { _id: '$hotelId', orderCount: { $sum: 1 }, totalAmount: { $sum: '$totalAmount' } } },
+    { $sort: { orderCount: -1 } },
+  ]);
+
+  const hotelIdsStats = hotelStatsAgg.map((h) => h._id);
+  const hotelsStats = hotelIdsStats.length
+    ? await User.findAll({ where: { id: { $in: hotelIdsStats } }, attributes: ['id', 'hotelName'] })
+    : [];
+  const hotelsStatsMap = new Map(hotelsStats.map((u) => [u.id, u.hotelName]));
 
   return {
     startDate: start,
@@ -235,10 +204,10 @@ const getMonthlyReport = async (date = new Date()) => {
     totalSales,
     orders: ordersWithHotel,
     invoices,
-    hotelStats: hotelStats.map(h => ({
-      hotelName: h.hotelName,
+    hotelStats: hotelStatsAgg.map(h => ({
+      hotelName: hotelsStatsMap.get(h._id) || `Hotel #${h._id}`,
       orderCount: parseInt(h.orderCount),
-      totalAmount: parseFloat(h.totalAmount),
+      totalAmount: parseFloat(h.totalAmount || 0),
     })),
   };
 };
@@ -246,8 +215,8 @@ const getMonthlyReport = async (date = new Date()) => {
 const getGSTReport = async (startDate, endDate) => {
   const invoices = await Invoice.findAll({
     where: {
-      createdAt: { [Op.gte]: startDate, [Op.lte]: endDate },
-      gstAmount: { [Op.gt]: 0 },
+      createdAt: { $gte: startDate, $lte: endDate },
+      gstAmount: { $gt: 0 },
     },
   });
 
@@ -257,11 +226,11 @@ const getGSTReport = async (startDate, endDate) => {
 
   const [hotels, orders] = await Promise.all([
     User.findAll({
-      where: { id: { [Op.in]: hotelIds } },
+      where: { id: { $in: hotelIds } },
       attributes: ['id', 'hotelName', 'gstNumber'],
     }),
     Order.findAll({
-      where: { id: { [Op.in]: orderIds } },
+      where: { id: { $in: orderIds } },
       attributes: ['id', 'orderNumber'],
     }),
   ]);
