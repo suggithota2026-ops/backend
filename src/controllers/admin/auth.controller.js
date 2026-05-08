@@ -3,15 +3,21 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { sendSuccess, sendError } = require('../../utils/response');
 const otpService = require('../../services/otp.service');
+const logger = require('../../utils/logger');
+const { adminMobileWhere } = require('../../utils/adminMobile');
 
 // Admin Send OTP
 exports.sendOtp = async (req, reply) => {
     try {
         const { mobileNumber } = req.body;
 
-        const admin = await Admin.findOne({ where: { mobileNumber } });
+        const admin = await Admin.findOne({ where: adminMobileWhere(mobileNumber) });
         if (!admin) {
             return sendError(reply, `Admin not found with mobile number: ${mobileNumber}`, 404);
+        }
+
+        if (admin.isActive === false) {
+            return sendError(reply, 'Account is disabled', 403);
         }
 
         const { code, expiresAt } = otpService.generateOTPWithExpiry();
@@ -21,10 +27,15 @@ exports.sendOtp = async (req, reply) => {
             otpExpiresAt: expiresAt
         });
 
-        // For development, we'll log it and attempt to send via otpService
-        await otpService.sendOTP(mobileNumber, code);
+        try {
+            await otpService.sendOTP(admin.mobileNumber, code);
+        } catch (err) {
+            logger.error('admin sendOtp: SMS failed', { message: err?.message });
+            await admin.update({ otpCode: null, otpExpiresAt: null });
+            return sendError(reply, err?.message || 'Failed to send OTP. Check SMS configuration.', 502);
+        }
 
-        return sendSuccess(reply, { code }, 'OTP sent successfully');
+        return sendSuccess(reply, { mobileNumber: admin.mobileNumber }, 'OTP sent successfully');
     } catch (error) {
         return sendError(reply, error.message, 500);
     }
@@ -35,9 +46,13 @@ exports.verifyOtp = async (req, reply) => {
     try {
         const { mobileNumber, otp } = req.body;
 
-        const admin = await Admin.findOne({ where: { mobileNumber } });
+        const admin = await Admin.findOne({ where: adminMobileWhere(mobileNumber) });
         if (!admin) {
             return sendError(reply, 'Admin not found', 404);
+        }
+
+        if (admin.isActive === false) {
+            return sendError(reply, 'Account is disabled', 403);
         }
 
         const isValid = otpService.verifyOTP(admin.otpCode, otp, admin.otpExpiresAt);
@@ -45,7 +60,6 @@ exports.verifyOtp = async (req, reply) => {
             return sendError(reply, 'Invalid or expired OTP', 400);
         }
 
-        // Clear OTP after successful verification
         await admin.update({
             otpCode: null,
             otpExpiresAt: null
@@ -64,7 +78,8 @@ exports.verifyOtp = async (req, reply) => {
                 username: admin.username,
                 mobileNumber: admin.mobileNumber,
                 name: admin.name,
-                role: admin.role
+                role: admin.role,
+                permissions: Array.isArray(admin.permissions) ? admin.permissions : []
             }
         }, 'Login successful');
     } catch (error) {
@@ -77,9 +92,13 @@ exports.resendOtp = async (req, reply) => {
     try {
         const { mobileNumber } = req.body;
 
-        const admin = await Admin.findOne({ where: { mobileNumber } });
+        const admin = await Admin.findOne({ where: adminMobileWhere(mobileNumber) });
         if (!admin) {
             return sendError(reply, `Admin not found with mobile number: ${mobileNumber}`, 404);
+        }
+
+        if (admin.isActive === false) {
+            return sendError(reply, 'Account is disabled', 403);
         }
 
         const { code, expiresAt } = otpService.generateOTPWithExpiry();
@@ -89,10 +108,15 @@ exports.resendOtp = async (req, reply) => {
             otpExpiresAt: expiresAt
         });
 
-        // Send OTP via service
-        await otpService.sendOTP(mobileNumber, code);
+        try {
+            await otpService.sendOTP(admin.mobileNumber, code);
+        } catch (err) {
+            logger.error('admin resendOtp: SMS failed', { message: err?.message });
+            await admin.update({ otpCode: null, otpExpiresAt: null });
+            return sendError(reply, err?.message || 'Failed to send OTP. Check SMS configuration.', 502);
+        }
 
-        return sendSuccess(reply, { code }, 'OTP resent successfully');
+        return sendSuccess(reply, { mobileNumber: admin.mobileNumber }, 'OTP resent successfully');
     } catch (error) {
         return sendError(reply, error.message, 500);
     }
@@ -103,7 +127,6 @@ exports.createAdmin = async (req, res) => {
     try {
         const { username, password, name } = req.body;
 
-        // Check if admin already exists
         const existingAdmin = await Admin.findOne({ where: { username } });
         if (existingAdmin) {
             return res.status(400).send({ message: 'Admin already exists' });
@@ -111,7 +134,7 @@ exports.createAdmin = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 8);
 
-        const admin = await Admin.create({
+        await Admin.create({
             username,
             password: hashedPassword,
             name,
@@ -145,7 +168,7 @@ exports.login = async (req, res) => {
         }
 
         const token = jwt.sign({ id: admin.id, role: admin.role, type: 'admin' }, process.env.JWT_SECRET, {
-            expiresIn: 86400 // 24 hours
+            expiresIn: 86400
         });
 
         res.status(200).send({
@@ -194,7 +217,6 @@ exports.updateProfile = async (req, reply) => {
         const adminId = req.user.id;
         const updateData = req.body;
 
-        // Prevent updating sensitive fields via this endpoint
         delete updateData.password;
         delete updateData.username;
         delete updateData.role;

@@ -14,17 +14,52 @@ async function seedDefaultAdmin() {
   const mobileNumber = String(DEFAULT_ADMIN_MOBILE).trim();
   if (!mobileNumber) return;
 
+  const username = String(DEFAULT_ADMIN_USERNAME || 'admin').trim() || 'admin';
   const existingByMobile = await Admin.findOne({ where: { mobileNumber } });
-  if (existingByMobile) return;
-
-  // Ensure username uniqueness (Mongo unique index)
-  let username = String(DEFAULT_ADMIN_USERNAME || 'admin').trim() || 'admin';
   const existingByUsername = await Admin.findOne({ where: { username } });
-  if (existingByUsername) {
-    username = `${username}_${mobileNumber}`;
-  }
 
   const hashedPassword = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
+
+  if (existingByMobile) {
+    await Admin.update(
+      {
+        username,
+        password: hashedPassword,
+        name: DEFAULT_ADMIN_NAME,
+        role: 'ADMIN',
+        isActive: true,
+      },
+      { where: { id: existingByMobile.id } }
+    );
+    logger.info(`Updated default admin for mobile ${mobileNumber}`);
+    return;
+  }
+
+  if (existingByUsername) {
+    const mobileTakenByOtherAdmin = await Admin.findOne({
+      where: { mobileNumber },
+    });
+
+    if (mobileTakenByOtherAdmin && mobileTakenByOtherAdmin.id !== existingByUsername.id) {
+      logger.warn(
+        `Could not update default admin username ${username} to mobile ${mobileNumber}: mobile is already assigned to another admin`
+      );
+      return;
+    }
+
+    await Admin.update(
+      {
+        mobileNumber,
+        password: hashedPassword,
+        name: DEFAULT_ADMIN_NAME,
+        role: 'ADMIN',
+        isActive: true,
+      },
+      { where: { id: existingByUsername.id } }
+    );
+    logger.info(`Updated default admin username ${username} with mobile ${mobileNumber}`);
+    return;
+  }
 
   await Admin.create({
     username,

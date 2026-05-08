@@ -28,6 +28,11 @@ module.exports = {
   OTP_EXPIRY_MINUTES: parseInt(process.env.OTP_EXPIRY_MINUTES || '10', 10),
   OTP_LENGTH: parseInt(process.env.OTP_LENGTH || '6', 10),
 
+  // Twilio (SMS OTP — admin portal and optional user OTP)
+  TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
+  TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
+  TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER || '',
+
   // Uploads
   UPLOAD_DIR: process.env.UPLOAD_DIR || './uploads',
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '5242880', 10), // 5MB

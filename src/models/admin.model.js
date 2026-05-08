@@ -22,6 +22,7 @@ const AdminSchema = new mongoose.Schema(
     businessName: { type: String, default: null },
     avatarUrl: { type: String, default: null },
     isActive: { type: Boolean, default: true },
+    permissions: { type: [String], default: [] },
   },
   { timestamps: true }
 );

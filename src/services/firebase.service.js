@@ -27,7 +27,7 @@ const getAdminFirestore = () => {
     if (!adminApp) {
       throw new Error('Firebase Admin SDK not initialized');
     }
-    return admin.firestore();
+    return admin.firestore(adminApp);
   } catch (error) {
     logger.error('Error getting Admin Firestore:', error);
     throw error;
@@ -43,7 +43,7 @@ const getAdminStorage = () => {
     if (!adminApp) {
       throw new Error('Firebase Admin SDK not initialized');
     }
-    return admin.storage();
+    return admin.storage(adminApp);
   } catch (error) {
     logger.error('Error getting Admin Storage:', error);
     throw error;
@@ -59,7 +59,7 @@ const getAdminAuth = () => {
     if (!adminApp) {
       throw new Error('Firebase Admin SDK not initialized');
     }
-    return admin.auth();
+    return admin.auth(adminApp);
   } catch (error) {
     logger.error('Error getting Admin Auth:', error);
     throw error;

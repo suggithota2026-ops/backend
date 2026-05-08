@@ -5,7 +5,8 @@ const {
     deleteAdmin,
 } = require('../../controllers/admin/admin_mgmt.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
-const { requireAdmin } = require('../../middlewares/admin.middleware');
+const { requirePermission } = require('../../middlewares/admin.middleware');
+const { PERMISSIONS } = require('../../config/permissions');
 
 const adminMgmtRoutes = async (fastify, options) => {
     // Staff Routes
@@ -15,10 +16,10 @@ const adminMgmtRoutes = async (fastify, options) => {
             summary: 'Get all staff members',
             security: [{ bearerAuth: [] }],
         },
-        // preHandler: [authenticate, requireAdmin],
+        preHandler: [authenticate, requirePermission(PERMISSIONS.STAFF_VIEW)],
     }, (request, reply) => {
         const { Op } = require('sequelize');
-        request.query.role = { [Op.in]: ['staff', 'ADMIN'] };
+        request.query.role = { [Op.in]: ['staff', 'STAFF', 'ADMIN', 'admin'] };
         return getAdmins(request, reply);
     });
 
@@ -28,7 +29,7 @@ const adminMgmtRoutes = async (fastify, options) => {
             summary: 'Create new staff member',
             security: [{ bearerAuth: [] }],
         },
-        // preHandler: [authenticate, requireAdmin],
+        preHandler: [authenticate, requirePermission(PERMISSIONS.STAFF_MANAGE)],
     }, (request, reply) => {
         // Default to staff if not specified, but the controller handles whatever is in body.role
         if (!request.body.role) request.body.role = 'staff';
@@ -42,9 +43,10 @@ const adminMgmtRoutes = async (fastify, options) => {
             summary: 'Get all drivers',
             security: [{ bearerAuth: [] }],
         },
-        // preHandler: [authenticate, requireAdmin],
+        preHandler: [authenticate, requirePermission(PERMISSIONS.DRIVERS_VIEW)],
     }, (request, reply) => {
-        request.query.role = 'driver';
+        const { Op } = require('sequelize');
+        request.query.role = { [Op.in]: ['driver', 'DRIVER'] };
         return getAdmins(request, reply);
     });
 
@@ -54,7 +56,7 @@ const adminMgmtRoutes = async (fastify, options) => {
             summary: 'Create new driver',
             security: [{ bearerAuth: [] }],
         },
-        // preHandler: [authenticate, requireAdmin],
+        preHandler: [authenticate, requirePermission(PERMISSIONS.DRIVERS_MANAGE)],
     }, (request, reply) => {
         request.body.role = 'driver';
         return createAdmin(request, reply);
@@ -73,7 +75,10 @@ const adminMgmtRoutes = async (fastify, options) => {
                 },
             },
         },
-        // preHandler: [authenticate, requireAdmin],
+        preHandler: [
+            authenticate,
+            requirePermission(PERMISSIONS.STAFF_MANAGE, PERMISSIONS.DRIVERS_MANAGE),
+        ],
     }, updateAdmin);
 
     fastify.delete('/users/:id', {
@@ -88,7 +93,10 @@ const adminMgmtRoutes = async (fastify, options) => {
                 },
             },
         },
-        // preHandler: [authenticate, requireAdmin],
+        preHandler: [
+            authenticate,
+            requirePermission(PERMISSIONS.STAFF_MANAGE, PERMISSIONS.DRIVERS_MANAGE),
+        ],
     }, deleteAdmin);
 };
 

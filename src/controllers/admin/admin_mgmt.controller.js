@@ -3,6 +3,15 @@ const bcrypt = require('bcryptjs');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
 const { ROLES } = require('../../config/constants');
+const { normalizePermissions } = require('../../config/permissions');
+
+const normalizeRole = (role) => {
+    const value = String(role || '').trim().toLowerCase();
+    if (value === 'admin') return 'ADMIN';
+    if (value === 'driver') return 'driver';
+    if (value === 'staff') return 'staff';
+    return ROLES.ADMIN;
+};
 
 // Get all admins by role
 const getAdmins = async (request, reply) => {
@@ -36,7 +45,7 @@ const getAdmins = async (request, reply) => {
 // Create a new admin/staff/driver
 const createAdmin = async (request, reply) => {
     try {
-        const { username, password, name, mobileNumber, role } = request.body;
+        const { username, password, name, mobileNumber, role, permissions } = request.body;
 
         // Check if user already exists
         const existingUser = await Admin.findOne({
@@ -60,8 +69,9 @@ const createAdmin = async (request, reply) => {
             password: hashedPassword,
             name,
             mobileNumber,
-            role: role || ROLES.ADMIN,
+            role: normalizeRole(role || ROLES.ADMIN),
             isActive: true,
+            permissions: normalizePermissions(permissions),
         });
 
         const adminResponse = admin.toJSON();
@@ -78,17 +88,23 @@ const createAdmin = async (request, reply) => {
 const updateAdmin = async (request, reply) => {
     try {
         const { id } = request.params;
-        const { name, mobileNumber, role, isActive, password } = request.body;
+        const { name, mobileNumber, role, isActive, password, permissions } = request.body;
 
         const admin = await Admin.findByPk(id);
         if (!admin) {
             return sendError(reply, 'User not found', 404);
         }
 
-        const updateData = { name, mobileNumber, role, isActive };
+        const updateData = { name, mobileNumber, isActive };
+        if (role !== undefined) {
+            updateData.role = normalizeRole(role);
+        }
 
         if (password) {
             updateData.password = await bcrypt.hash(password, 10);
+        }
+        if (permissions !== undefined) {
+            updateData.permissions = normalizePermissions(permissions);
         }
 
         // Filter out undefined values

@@ -50,6 +50,7 @@ const authenticate = async (request, reply) => {
       type: userType,
       mobileNumber: user.mobileNumber, // Admin might not have this, usage should be safe
       name: user.name || user.hotelName, // Generic name field
+      permissions: Array.isArray(user.permissions) ? user.permissions : [],
     };
 
     return;
