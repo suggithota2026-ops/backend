@@ -84,7 +84,7 @@ const pushPromotionalOffer = async (request, reply) => {
         // Check if categories exist if provided
         if (categoryIds && categoryIds.length > 0) {
             const categories = await Category.findAll({
-                where: { id: { [Op.in]: categoryIds } },
+                where: { id: { $in: categoryIds } },
                 attributes: ['id', 'name', 'subcategories']
             });
             
@@ -193,7 +193,7 @@ const pushPromotionalOffer = async (request, reply) => {
         if (hotelIds && hotelIds.length > 0) {
             // Validate that the specified hotels exist
             const targetHotels = await User.findAll({
-                where: { id: { [Op.in]: hotelIds } },
+                where: { id: { $in: hotelIds } },
                 attributes: ['id', 'role']
             });
             

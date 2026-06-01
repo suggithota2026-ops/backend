@@ -1,20 +1,15 @@
 // Invoice service
 const Invoice = require('../models/invoice.model');
 const Order = require('../models/order.model');
-const User = require('../models/user.model');
 const { generateInvoicePDF } = require('../utils/pdfGenerator');
 const logger = require('../utils/logger');
 const { INVOICE_STATUS } = require('../config/constants');
+const { attachHotelsToOrders } = require('../utils/orderEnrichment');
 
 const generateInvoice = async (orderId) => {
   try {
-    const order = await Order.findByPk(orderId, {
-      include: [{
-        model: User,
-        as: 'hotel',
-        attributes: ['hotelName', 'address', 'gstNumber'],
-      }],
-    });
+    const orderRaw = await Order.findByPk(orderId);
+    const order = await attachHotelsToOrders(orderRaw);
 
     if (!order) {
       throw new Error('Order not found');

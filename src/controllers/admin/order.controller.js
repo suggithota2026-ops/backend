@@ -1,12 +1,12 @@
 // Admin order controller
-const { Op } = require('sequelize');
 const Order = require('../../models/order.model');
-const User = require('../../models/user.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const { sendOrderNotification } = require('../../services/notification.service');
 const { generateInvoice } = require('../../services/invoice.service');
 const { ORDER_STATUS } = require('../../config/constants');
 const logger = require('../../utils/logger');
+const { getStartOfDay, getEndOfDay } = require('../../utils/date');
+const { attachHotelsToOrders } = require('../../utils/orderEnrichment');
 
 const getOrders = async (request, reply) => {
   try {
@@ -24,31 +24,23 @@ const getOrders = async (request, reply) => {
     if (hotel) where.hotelId = parseInt(hotel);
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.createdAt[Op.lte] = end;
-      }
+      if (startDate) where.createdAt.$gte = getStartOfDay(new Date(startDate));
+      if (endDate) where.createdAt.$lte = getEndOfDay(new Date(endDate));
     }
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    const [orders, total] = await Promise.all([
+    const [ordersRaw, total] = await Promise.all([
       Order.findAll({
         where,
-        include: [{
-          model: User,
-          as: 'hotel',
-          attributes: ['id', 'hotelName', 'mobileNumber', 'address'],
-          required: false,
-        }],
         order: [['createdAt', 'DESC']],
         offset,
         limit: parseInt(limit),
       }),
       Order.count({ where }),
     ]);
+
+    const orders = await attachHotelsToOrders(ordersRaw);
 
     return sendSuccess(reply, {
       orders,
@@ -74,20 +66,15 @@ const getOrder = async (request, reply) => {
       return sendError(reply, 'Invalid order ID', 400);
     }
 
-    const order = await Order.findByPk(orderId, {
-      include: [{
-        model: User,
-        as: 'hotel',
-        attributes: ['id', 'hotelName', 'mobileNumber', 'address', 'gstNumber'],
-        required: false,
-      }],
-    });
+    const order = await Order.findByPk(orderId);
 
     if (!order) {
       return sendError(reply, 'Order not found', 404);
     }
 
-    return sendSuccess(reply, order, 'Order retrieved successfully');
+    const enrichedOrder = await attachHotelsToOrders(order);
+
+    return sendSuccess(reply, enrichedOrder, 'Order retrieved successfully');
   } catch (error) {
     logger.error('Error fetching order:', error);
     return sendError(reply, 'Failed to fetch order', 500);
@@ -112,13 +99,7 @@ const updateOrder = async (request, reply) => {
       return sendError(reply, 'Invalid order ID', 400);
     }
 
-    const order = await Order.findByPk(orderId, {
-      include: [{
-        model: User,
-        as: 'hotel',
-        required: false,
-      }],
-    });
+    const order = await Order.findByPk(orderId);
 
     if (!order) {
       return sendError(reply, 'Order not found', 404);
@@ -154,14 +135,7 @@ const updateOrder = async (request, reply) => {
 
     await order.update(updateData);
 
-    // Reload order to get updated data
-    await order.reload({
-      include: [{
-        model: User,
-        as: 'hotel',
-        required: false,
-      }],
-    });
+    await order.reload();
 
     // Send notification based on status change
     if (status && status !== oldStatus) {
@@ -178,7 +152,9 @@ const updateOrder = async (request, reply) => {
       }
     }
 
-    return sendSuccess(reply, order, 'Order updated successfully');
+    const enrichedOrder = await attachHotelsToOrders(order);
+
+    return sendSuccess(reply, enrichedOrder, 'Order updated successfully');
   } catch (error) {
     logger.error('Error updating order:', error);
     return sendError(reply, 'Failed to update order', 500);
@@ -195,13 +171,7 @@ const updateOrderStatus = async (request, reply) => {
       return sendError(reply, 'Invalid order ID', 400);
     }
 
-    const order = await Order.findByPk(orderId, {
-      include: [{
-        model: User,
-        as: 'hotel',
-        required: false,
-      }],
-    });
+    const order = await Order.findByPk(orderId);
 
     if (!order) {
       return sendError(reply, 'Order not found', 404);
@@ -227,14 +197,7 @@ const updateOrderStatus = async (request, reply) => {
 
     await order.update(updateData);
 
-    // Reload order to get updated data
-    await order.reload({
-      include: [{
-        model: User,
-        as: 'hotel',
-        required: false,
-      }],
-    });
+    await order.reload();
 
     // Send notification based on status change
     if (status === ORDER_STATUS.CONFIRMED && oldStatus === ORDER_STATUS.PENDING) {
@@ -249,7 +212,9 @@ const updateOrderStatus = async (request, reply) => {
       await sendOrderNotification(order, 'order_cancelled', order.hotelId);
     }
 
-    return sendSuccess(reply, order, 'Order status updated successfully');
+    const enrichedOrder = await attachHotelsToOrders(order);
+
+    return sendSuccess(reply, enrichedOrder, 'Order status updated successfully');
   } catch (error) {
     logger.error('Error updating order status:', error);
     return sendError(reply, 'Failed to update order status', 500);
@@ -269,36 +234,27 @@ const generateOrderInvoice = async (request, reply) => {
 
 const getTodaysOrdersSummary = async (request, reply) => {
   try {
-    const { getStartOfDay, getEndOfDay } = require('../../utils/date');
-
-    // Get today's date range
     const startOfDay = getStartOfDay();
     const endOfDay = getEndOfDay();
 
     // Fetch today's orders with hotel and items information
-    const orders = await Order.findAll({
+    const ordersRaw = await Order.findAll({
       where: {
         createdAt: {
-          [Op.gte]: startOfDay,
-          [Op.lte]: endOfDay
-        }
+          $gte: startOfDay,
+          $lte: endOfDay,
+        },
       },
-      include: [
-        {
-          model: User,
-          as: 'hotel',
-          attributes: ['id', 'hotelName'],
-          required: true
-        }
-      ],
-      order: [['createdAt', 'ASC']]
+      order: [['createdAt', 'ASC']],
     });
+
+    const orders = await attachHotelsToOrders(ordersRaw);
 
     // Process orders to create client-wise item summary
     const itemSummary = {};
 
     orders.forEach(order => {
-      const clientName = order.hotel.hotelName || `Hotel #${order.hotelId}`;
+      const clientName = order.hotel?.hotelName || `Hotel #${order.hotelId}`;
 
       // Process each item in the order
       if (order.items && Array.isArray(order.items)) {

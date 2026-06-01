@@ -2,7 +2,7 @@
 const User = require('../../models/user.model');
 const Order = require('../../models/order.model');
 const CustomerProductPricing = require('../../models/customer.product.pricing.model');
-const { ROLES } = require('../../config/constants');
+const { ROLES, ORDER_STATUS } = require('../../config/constants');
 const { sendSuccess, sendError } = require('../../utils/response');
 const { sendMessage } = require('../../services/otp.service');
 const logger = require('../../utils/logger');
@@ -327,19 +327,28 @@ const deleteHotel = async (request, reply) => {
       return sendError(reply, 'Hotel not found', 404);
     }
 
-    // Check if hotel has any pending or active orders
-    // Allow deletion only if all orders are 'confirmed' (completed)
-    const pendingOrders = await Order.count({
+    const hotelId = parseInt(id, 10);
+
+    // Block deletion only when there are in-progress orders
+    const activeOrders = await Order.count({
       where: {
-        hotelId: id,
+        hotelId,
         status: {
-          $ne: 'confirmed',
-        }
-      }
+          $in: [
+            ORDER_STATUS.PENDING,
+            ORDER_STATUS.CONFIRMED,
+            ORDER_STATUS.DISPATCHED,
+          ],
+        },
+      },
     });
 
-    if (pendingOrders > 0) {
-      return sendError(reply, 'Cannot delete hotel with pending or active orders. Only hotels with all orders marked as "confirmed" can be deleted.', 400);
+    if (activeOrders > 0) {
+      return sendError(
+        reply,
+        'Cannot delete hotel with pending or active orders. Deliver or cancel all orders first.',
+        400
+      );
     }
 
     await hotel.destroy();

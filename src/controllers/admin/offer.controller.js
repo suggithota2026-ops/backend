@@ -94,32 +94,94 @@ const getOfferById = async (request, reply) => {
   }
 };
 
+const normalizeDiscountType = (discountType) => {
+  if (discountType === 'fixed') return 'flat';
+  return discountType;
+};
+
+const enhanceOfferResponse = (offerDoc) => {
+  const enhancedOffer = offerDoc.toJSON ? offerDoc.toJSON() : offerDoc;
+  const metadata = enhancedOffer.metadata || {};
+
+  return {
+    ...enhancedOffer,
+    discountType: enhancedOffer.discountType === 'flat' ? 'fixed' : enhancedOffer.discountType,
+    title: metadata.offerTitle || enhancedOffer.code,
+    description: metadata.offerDescription || '',
+    categoryIds: metadata.categoryIds || [],
+    subcategoryNames: metadata.subcategoryNames || [],
+    originalValidUntil: metadata.originalValidUntil || null,
+  };
+};
+
+// Create offer
+const createOffer = async (request, reply) => {
+  try {
+    const {
+      code,
+      discountType,
+      discountValue,
+      validFrom,
+      validUntil,
+      minOrderAmount,
+      maxDiscountAmount,
+      usageLimit,
+      isActive = true,
+      metadata,
+      hotelIds,
+      title,
+      description,
+    } = request.body;
+
+    if (!code || !discountType || discountValue === undefined || !validUntil) {
+      return sendError(reply, 'Code, discount type, discount value, and valid until are required', 400);
+    }
+
+    const normalizedDiscountType = normalizeDiscountType(discountType);
+    if (!['percentage', 'flat'].includes(normalizedDiscountType)) {
+      return sendError(reply, 'Invalid discount type', 400);
+    }
+
+    const normalizedCode = String(code).trim().toUpperCase();
+    const existingOffer = await Coupon.findOne({ where: { code: normalizedCode } });
+    if (existingOffer) {
+      return sendError(reply, 'Offer code already exists', 400);
+    }
+
+    const offerMetadata = {
+      ...(metadata || {}),
+      offerTitle: metadata?.offerTitle || title || normalizedCode,
+      offerDescription: metadata?.offerDescription || description || '',
+      hotelIds: hotelIds || metadata?.hotelIds || [],
+    };
+
+    const offer = await Coupon.create({
+      code: normalizedCode,
+      discountType: normalizedDiscountType,
+      discountValue,
+      validFrom: validFrom ? new Date(validFrom) : new Date(),
+      validUntil: new Date(validUntil),
+      minOrderAmount: minOrderAmount || 0,
+      maxDiscountAmount: maxDiscountAmount ?? null,
+      usageLimit: usageLimit ?? null,
+      isActive,
+      usedCount: 0,
+      createdBy: request.user?.id || null,
+      metadata: offerMetadata,
+    });
+
+    return sendSuccess(reply, { offer: enhanceOfferResponse(offer) }, 'Offer created successfully', 201);
+  } catch (error) {
+    logger.error('Error creating offer:', error);
+    return sendError(reply, 'Failed to create offer', 500);
+  }
+};
+
 // Update offer
 const updateOffer = async (request, reply) => {
   try {
     const { id } = request.params;
-    const { 
-      code, 
-      discountType, 
-      discountValue, 
-      validFrom, 
-      validUntil, 
-      minOrderAmount, 
-      maxDiscountAmount, 
-      usageLimit, 
-      isActive, 
-      metadata,
-      hotelIds
-    } = request.body;
-
-    const offer = await Coupon.findByPk(id);
-    
-    if (!offer) {
-      return sendError(reply, 'Offer not found', 404);
-    }
-
-    // Update the offer
-    await offer.update({
+    const {
       code,
       discountType,
       discountValue,
@@ -129,13 +191,41 @@ const updateOffer = async (request, reply) => {
       maxDiscountAmount,
       usageLimit,
       isActive,
-      metadata: {
-        ...metadata,
-        hotelIds: hotelIds || metadata?.hotelIds || []
+      metadata,
+      hotelIds,
+    } = request.body;
+
+    const offer = await Coupon.findByPk(id);
+
+    if (!offer) {
+      return sendError(reply, 'Offer not found', 404);
+    }
+
+    const normalizedCode = code ? String(code).trim().toUpperCase() : offer.code;
+    if (normalizedCode !== offer.code) {
+      const existingOffer = await Coupon.findOne({ where: { code: normalizedCode } });
+      if (existingOffer) {
+        return sendError(reply, 'Offer code already exists', 400);
       }
+    }
+
+    await offer.update({
+      code: normalizedCode,
+      discountType: discountType ? normalizeDiscountType(discountType) : offer.discountType,
+      discountValue,
+      validFrom,
+      validUntil,
+      minOrderAmount,
+      maxDiscountAmount,
+      usageLimit,
+      isActive,
+      metadata: {
+        ...(metadata || offer.metadata || {}),
+        hotelIds: hotelIds || metadata?.hotelIds || offer.metadata?.hotelIds || [],
+      },
     });
 
-    return sendSuccess(reply, { offer }, 'Offer updated successfully');
+    return sendSuccess(reply, { offer: enhanceOfferResponse(offer) }, 'Offer updated successfully');
   } catch (error) {
     logger.error('Error updating offer:', error);
     return sendError(reply, 'Failed to update offer', 500);
@@ -301,10 +391,12 @@ const calculateDaysRemaining = (validUntil) => {
 module.exports = {
   getAllOffers,
   getOfferById,
+  createOffer,
   updateOffer,
   deleteOffer,
   getAdminOffers,
   getAdminOfferById,
-  updateAdminOffer: updateOffer, // Reuse the same update function
-  deleteAdminOffer: deleteOffer, // Reuse the same delete function
+  updateAdminOffer: updateOffer,
+  deleteAdminOffer: deleteOffer,
+  createAdminOffer: createOffer,
 };

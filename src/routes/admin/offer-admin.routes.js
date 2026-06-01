@@ -1,7 +1,8 @@
 // Admin-specific offers routes (for the Offers tab in admin panel)
 const { 
   getAdminOffers, 
-  getAdminOfferById, 
+  getAdminOfferById,
+  createAdminOffer,
   updateAdminOffer, 
   deleteAdminOffer 
 } = require('../../controllers/admin/offer.controller');
@@ -29,6 +30,35 @@ const offerAdminRoutes = async (fastify, options) => {
     },
     preHandler: [authenticate, authorizeAdmin],
   }, getAdminOffers);
+
+  // Create offer (admin panel)
+  fastify.post('/offers-admin', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Create offer',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        properties: {
+          code: { type: 'string' },
+          discountType: { type: 'string', enum: ['percentage', 'flat', 'fixed'] },
+          discountValue: { type: 'number' },
+          validFrom: { type: 'string', format: 'date-time' },
+          validUntil: { type: 'string', format: 'date-time' },
+          minOrderAmount: { type: 'number' },
+          maxDiscountAmount: { type: 'number' },
+          usageLimit: { type: 'number' },
+          isActive: { type: 'boolean' },
+          metadata: { type: 'object' },
+          hotelIds: { type: 'array', items: { type: 'integer' } },
+          title: { type: 'string' },
+          description: { type: 'string' },
+        },
+        required: ['code', 'discountType', 'discountValue', 'validUntil'],
+      },
+    },
+    preHandler: [authenticate, authorizeAdmin],
+  }, createAdminOffer);
 
   // Get specific offer for admin panel
   fastify.get('/offers-admin/:id', {
@@ -64,7 +94,7 @@ const offerAdminRoutes = async (fastify, options) => {
         type: 'object',
         properties: {
           code: { type: 'string' },
-          discountType: { type: 'string', enum: ['percentage', 'flat'] },
+          discountType: { type: 'string', enum: ['percentage', 'flat', 'fixed'] },
           discountValue: { type: 'number' },
           validFrom: { type: 'string', format: 'date-time' },
           validUntil: { type: 'string', format: 'date-time' },

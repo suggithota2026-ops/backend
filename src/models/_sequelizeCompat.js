@@ -44,11 +44,33 @@ function toMongoRegexFromILike(pattern) {
   return new RegExp(re, 'i');
 }
 
+function cloneWhere(value) {
+  if (!value || typeof value !== 'object') return value;
+  if (value instanceof Date || value instanceof RegExp) return value;
+
+  const out = Array.isArray(value) ? [] : {};
+  for (const sym of Object.getOwnPropertySymbols(value)) {
+    out[sym] = cloneWhere(value[sym]);
+  }
+  for (const [k, v] of Object.entries(value)) {
+    out[k] = cloneWhere(v);
+  }
+  return out;
+}
+
+function mergeFieldOperator(out, field, operator, value) {
+  const current = out[field];
+  out[field] = {
+    ...(current && typeof current === 'object' && !Array.isArray(current) ? current : {}),
+    [operator]: value,
+  };
+}
+
 function normalizeWhere(where) {
   if (!where || typeof where !== 'object') return where;
 
-  // Clone shallowly so we can mutate safely
-  const out = { ...where };
+  // Deep clone so parallel queries do not mutate shared nested objects
+  const out = cloneWhere(where);
 
   // Handle Sequelize Op symbols
   const symbols = Object.getOwnPropertySymbols(out);
@@ -86,15 +108,15 @@ function normalizeWhere(where) {
       } else if (opKey === 'Symbol(or)' && Array.isArray(opVal)) {
         out[k] = { $in: opVal };
       } else if (opKey === 'Symbol(ne)') {
-        out[k] = { $ne: opVal };
+        mergeFieldOperator(out, k, '$ne', opVal);
       } else if (opKey === 'Symbol(gt)') {
-        out[k] = { $gt: opVal };
+        mergeFieldOperator(out, k, '$gt', opVal);
       } else if (opKey === 'Symbol(gte)') {
-        out[k] = { $gte: opVal };
+        mergeFieldOperator(out, k, '$gte', opVal);
       } else if (opKey === 'Symbol(lt)') {
-        out[k] = { $lt: opVal };
+        mergeFieldOperator(out, k, '$lt', opVal);
       } else if (opKey === 'Symbol(lte)') {
-        out[k] = { $lte: opVal };
+        mergeFieldOperator(out, k, '$lte', opVal);
       } else if (opKey === 'Symbol(contains)' && Array.isArray(opVal)) {
         // JSONB contains for arrays of objects: [{id: '...'}]
         const first = opVal[0];
