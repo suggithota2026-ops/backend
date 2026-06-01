@@ -12,20 +12,41 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:3002',
 ];
 
+function expandOriginVariants(origin) {
+  const variants = new Set([origin]);
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return variants;
+
+    const host = url.hostname;
+    if (host.startsWith('www.')) {
+      const alt = `${url.protocol}//${host.slice(4)}${url.port ? `:${url.port}` : ''}`;
+      variants.add(alt);
+    } else {
+      const alt = `${url.protocol}//www.${host}${url.port ? `:${url.port}` : ''}`;
+      variants.add(alt);
+    }
+  } catch {
+    // Ignore invalid URLs
+  }
+  return variants;
+}
+
 function getAllowedOrigins() {
-  // Explicit list from env (comma-separated) – use as-is
   const envList = process.env.CORS_ORIGINS || process.env.ALLOWED_ORIGINS;
-  let origins = envList
+  const seedOrigins = envList
     ? envList.split(',').map((o) => o.trim()).filter(Boolean)
     : [...DEFAULT_ALLOWED_ORIGINS];
 
-  // Add FRONTEND_URL from env so you can set it in Render/Vercel without replacing the whole list
   const frontendUrl = process.env.FRONTEND_URL && process.env.FRONTEND_URL.trim();
-  if (frontendUrl && !origins.includes(frontendUrl)) {
-    origins = [frontendUrl, ...origins];
+  if (frontendUrl) seedOrigins.unshift(frontendUrl);
+
+  const origins = new Set();
+  for (const origin of seedOrigins) {
+    expandOriginVariants(origin).forEach((variant) => origins.add(variant));
   }
 
-  return origins;
+  return [...origins];
 }
 
 async function corsPlugin(fastify, options) {
