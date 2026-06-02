@@ -14,6 +14,18 @@ cloudinary.config({
   secure: process.env.CLOUDINARY_SECURE_DELIVERY === 'true'
 });
 
+const isCloudinaryConfigured = Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_SECRET
+);
+
+if (isCloudinaryConfigured) {
+  logger.info(`Cloudinary configured for cloud "${process.env.CLOUDINARY_CLOUD_NAME}" with folder "${process.env.CLOUDINARY_UPLOAD_FOLDER || 'uploads'}"`);
+} else {
+  logger.warn('Cloudinary not configured: missing CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET');
+}
+
 class CloudinaryService {
   constructor() {
     this.destroy = promisify(cloudinary.uploader.destroy);

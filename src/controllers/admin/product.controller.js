@@ -3,7 +3,7 @@ const { Op } = require('sequelize');
 const Product = require('../../models/product.model');
 const Category = require('../../models/category.model');
 const { sendSuccess, sendError, sendValidationError } = require('../../utils/response');
-const { updateProductSchema } = require('../../validations/product.validation');
+const { createProductSchema, updateProductSchema } = require('../../validations/product.validation');
 const logger = require('../../utils/logger');
 const fs = require('fs');
 const path = require('path');
@@ -14,6 +14,10 @@ const cloudinaryService = require('../../services/cloudinary.service');
 // Inline file upload functions (workaround for file service issues)
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
 const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+const isCloudinaryConfigError = (error) => {
+  const message = String(error?.message || '');
+  return message.includes('Must supply api_key');
+};
 
 const ensureUploadDir = (subDir = '') => {
   const uploadPath = path.join(__dirname, '../../../', UPLOAD_DIR, subDir);
@@ -155,6 +159,10 @@ const createProduct = async (request, reply) => {
           const imagePath = await saveFile(part, 'products');
           imagePaths.push(imagePath);
         } catch (error) {
+          if (isCloudinaryConfigError(error)) {
+            logger.warn('Cloudinary not configured. Continuing create product without uploaded image.');
+            continue;
+          }
           logger.error('Error uploading image:', error);
           return sendError(reply, error.message || 'Failed to upload image', 400);
         }
@@ -167,6 +175,28 @@ const createProduct = async (request, reply) => {
         }
       }
     }
+
+    // Convert string values before validation
+    if (productData.price !== undefined) productData.price = parseFloat(productData.price);
+    if (productData.stock !== undefined) productData.stock = parseFloat(productData.stock);
+    if (productData.minStockLevel !== undefined) productData.minStockLevel = parseFloat(productData.minStockLevel);
+    if (productData.displayOrder !== undefined) productData.displayOrder = parseInt(productData.displayOrder);
+    if (productData.isActive !== undefined) {
+      productData.isActive = productData.isActive === 'true' || productData.isActive === true;
+    }
+    if (productData.pricingType && typeof productData.pricingType === 'string') {
+      productData.pricingType = productData.pricingType.toLowerCase();
+    }
+
+    const { error: createValidationError, value: validatedProductData } = createProductSchema.validate(productData, {
+      abortEarly: false,
+      convert: true,
+    });
+    if (createValidationError) {
+      return sendValidationError(reply, createValidationError.details);
+    }
+
+    Object.assign(productData, validatedProductData);
 
     // Verify category exists - ensure categoryId is a valid integer
     const categoryId = parseInt(productData.category);
@@ -208,13 +238,6 @@ const createProduct = async (request, reply) => {
         return sendError(reply, 'Invalid pricing type. Must be: fixed, daily, or weekly', 400);
       }
     }
-
-    // Convert price and stock to numbers
-    if (productData.price) productData.price = parseFloat(productData.price);
-    if (productData.stock) productData.stock = parseFloat(productData.stock);
-    if (productData.minStockLevel) productData.minStockLevel = parseFloat(productData.minStockLevel);
-    if (productData.displayOrder) productData.displayOrder = parseInt(productData.displayOrder);
-    if (productData.isActive !== undefined) productData.isActive = productData.isActive === 'true' || productData.isActive === true;
 
     const product = await Product.create({
       ...productData,
@@ -406,6 +429,10 @@ const updateProduct = async (request, reply) => {
             const imagePath = await saveFile(part, 'products');
             newImagePaths.push(imagePath);
           } catch (error) {
+            if (isCloudinaryConfigError(error)) {
+              logger.warn('Cloudinary not configured. Continuing update product without uploaded image.');
+              continue;
+            }
             logger.error('Error uploading image:', error);
             return sendError(reply, error.message || 'Failed to upload image', 400);
           }

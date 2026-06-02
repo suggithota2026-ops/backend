@@ -11,10 +11,7 @@ const {
 } = require('../../controllers/admin/product.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requireAdmin } = require('../../middlewares/admin.middleware');
-const { sendValidationError } = require('../../utils/response');
 const {
-  createProductSchema,
-  updateProductSchema,
   updateStockSchema,
   updatePriceSchema,
 } = require('../../validations/product.validation');
@@ -28,12 +25,8 @@ const productRoutes = async (fastify, options) => {
       consumes: ['multipart/form-data'],
     },
     // preHandler: [authenticate, requireAdmin],
-    preValidation: async (request, reply) => {
-      const { error } = createProductSchema.validate(request.body);
-      if (error) {
-        return sendValidationError(reply, error.details);
-      }
-    },
+    // Multipart create payload is parsed in controller via request.parts().
+    // Validating request.body here can incorrectly fail with empty body.
   }, createProduct);
 
   fastify.get('/products', {
