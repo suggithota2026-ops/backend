@@ -17,7 +17,8 @@ async function allocateNextId(Model, sequenceName) {
     ).lean();
 
     const candidateId = ret.seq;
-    const exists = await Model.findOne({ id: candidateId }).select('_id').lean();
+    // Use findByPk (compat layer) — Model.findOne().select() is not chainable there
+    const exists = await Model.findByPk(candidateId);
     if (!exists) return candidateId;
 
     const [latest] = await Model.find().sort({ id: -1 }).limit(1).select('id').lean();

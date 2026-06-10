@@ -3,6 +3,8 @@ const fp = require('fastify-plugin');
 const fastifyCors = require('@fastify/cors');
 
 const DEFAULT_ALLOWED_ORIGINS = [
+  'https://suggithota.com',
+  'https://www.suggithota.com',
   'https://frontend-puce-three-76.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
