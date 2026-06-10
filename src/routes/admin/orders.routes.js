@@ -4,6 +4,7 @@ const {
   getOrder,
   updateOrderStatus,
   updateOrder,
+  deleteOrder,
   generateOrderInvoice,
   getTodaysOrdersSummary,
 } = require('../../controllers/admin/order.controller');
@@ -86,6 +87,21 @@ const orderRoutes = async (fastify, options) => {
     // preHandler: [authenticate, requireAdmin],
   }, updateOrder);
 
+  fastify.delete('/orders/:id', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Delete order',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+    },
+    // preHandler: [authenticate, requireAdmin],
+  }, deleteOrder);
+
   fastify.patch('/orders/:id/status', {
     schema: {
       tags: ['admin'],
@@ -134,9 +150,17 @@ const orderRoutes = async (fastify, options) => {
   fastify.get('/orders/today/summary', {
     schema: {
       tags: ['admin'],
-      summary: 'Get today\'s orders summary',
+      summary: 'Get orders summary by date and time range',
       security: [{ bearerAuth: [] }],
-      description: 'Returns client-wise item summary for today\'s orders with quantities and totals'
+      description: 'Returns client-wise item summary for orders within the selected date and time range',
+      querystring: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', format: 'date' },
+          startTime: { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
+          endTime: { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
+        },
+      },
     },
     // preHandler: [authenticate, requireAdmin],
   }, getTodaysOrdersSummary);

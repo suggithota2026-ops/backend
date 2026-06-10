@@ -22,6 +22,7 @@ const { initializeFirebase } = require('./config/firebase');
 const { connectDB } = require('./config/db');
 const logger = require('./utils/logger');
 const { seedDefaultAdmin } = require('./utils/seedDefaultAdmin');
+const { syncCounters } = require('./utils/syncCounters');
 
 
 // ===============================
@@ -34,6 +35,7 @@ const start = async () => {
     // -------------------------------
     initializeFirebase();
     await connectDB();
+    await syncCounters();
     await seedDefaultAdmin();
 
     // -------------------------------

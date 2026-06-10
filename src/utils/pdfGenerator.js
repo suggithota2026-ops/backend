@@ -3,6 +3,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const { formatDate } = require('./date');
+const { amountInWords } = require('./amountInWords');
 
 const generateInvoicePDF = (invoice, order, hotel) => {
   return new Promise((resolve, reject) => {
@@ -120,6 +121,13 @@ const generateInvoicePDF = (invoice, order, hotel) => {
       }
 
       doc.fontSize(12).text(`Total: ₹${parseFloat(invoice.totalAmount).toFixed(2)}`, 350, yPosition);
+      yPosition += 18;
+      doc.fontSize(9).text(
+        `Amount in words: ${amountInWords(parseFloat(invoice.totalAmount))} Only`,
+        50,
+        yPosition,
+        { width: 500 }
+      );
 
       // Footer
       doc.fontSize(8).text(`Payment Method: ${(order.paymentMethod || 'cod').toUpperCase()}`, 50, 700);

@@ -1,11 +1,13 @@
 // Admin order controller
 const Order = require('../../models/order.model');
+const Invoice = require('../../models/invoice.model');
+const Notification = require('../../models/notification.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const { sendOrderNotification } = require('../../services/notification.service');
 const { generateInvoice } = require('../../services/invoice.service');
 const { ORDER_STATUS } = require('../../config/constants');
 const logger = require('../../utils/logger');
-const { getStartOfDay, getEndOfDay } = require('../../utils/date');
+const { getStartOfDay, getEndOfDay, applyTimeToDate } = require('../../utils/date');
 const { attachHotelsToOrders } = require('../../utils/orderEnrichment');
 
 const getOrders = async (request, reply) => {
@@ -221,6 +223,37 @@ const updateOrderStatus = async (request, reply) => {
   }
 };
 
+const deleteOrder = async (request, reply) => {
+  try {
+    const orderId = parseInt(request.params.id, 10);
+
+    if (isNaN(orderId)) {
+      return sendError(reply, 'Invalid order ID', 400);
+    }
+
+    const order = await Order.findByPk(orderId);
+
+    if (!order) {
+      return sendError(reply, 'Order not found', 404);
+    }
+
+    const invoice = await Invoice.findOne({ where: { orderId } });
+    if (invoice) {
+      await invoice.destroy();
+    }
+
+    await Notification.deleteMany({ orderId });
+
+    await order.destroy();
+
+    logger.info(`Order deleted: ${orderId}`);
+    return sendSuccess(reply, null, 'Order deleted successfully');
+  } catch (error) {
+    logger.error('Error deleting order:', error);
+    return sendError(reply, 'Failed to delete order', 500);
+  }
+};
+
 const generateOrderInvoice = async (request, reply) => {
   try {
     const { id } = request.params;
@@ -234,15 +267,30 @@ const generateOrderInvoice = async (request, reply) => {
 
 const getTodaysOrdersSummary = async (request, reply) => {
   try {
-    const startOfDay = getStartOfDay();
-    const endOfDay = getEndOfDay();
+    const { date, startTime, endTime } = request.query;
+    const baseDate = date
+      ? (() => {
+        const [year, month, day] = date.split('-').map(Number);
+        return new Date(year, month - 1, day);
+      })()
+      : new Date();
+    const rangeStart = startTime
+      ? applyTimeToDate(baseDate, startTime)
+      : getStartOfDay(baseDate);
+    const rangeEnd = endTime
+      ? applyTimeToDate(baseDate, endTime, true)
+      : getEndOfDay(baseDate);
 
-    // Fetch today's orders with hotel and items information
+    if (rangeStart > rangeEnd) {
+      return sendError(reply, 'Start time must be before end time', 400);
+    }
+
+    // Fetch orders within the selected date/time range
     const ordersRaw = await Order.findAll({
       where: {
         createdAt: {
-          $gte: startOfDay,
-          $lte: endOfDay,
+          $gte: rangeStart,
+          $lte: rangeEnd,
         },
       },
       order: [['createdAt', 'ASC']],
@@ -300,11 +348,15 @@ const getTodaysOrdersSummary = async (request, reply) => {
     // Sort by item name
     summaryArray.sort((a, b) => a.itemName.localeCompare(b.itemName));
 
+    const displayDate = date || new Date().toISOString().split('T')[0];
+
     return sendSuccess(reply, {
-      date: new Date().toISOString().split('T')[0],
+      date: displayDate,
+      startTime: startTime || '00:00',
+      endTime: endTime || '23:59',
       totalOrders: orders.length,
       summary: summaryArray
-    }, 'Today\'s orders summary retrieved successfully');
+    }, 'Orders summary retrieved successfully');
 
   } catch (error) {
     logger.error('Error fetching today\'s orders summary:', error);
@@ -317,6 +369,7 @@ module.exports = {
   getOrder,
   updateOrderStatus,
   updateOrder,
+  deleteOrder,
   generateOrderInvoice,
   getTodaysOrdersSummary,
 };

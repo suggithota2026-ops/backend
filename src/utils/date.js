@@ -32,6 +32,13 @@ const getEndOfDay = (date = new Date()) => {
   return d;
 };
 
+const applyTimeToDate = (date, timeStr, endOfMinute = false) => {
+  const d = new Date(date);
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  d.setHours(hours, minutes, endOfMinute ? 59 : 0, endOfMinute ? 999 : 0);
+  return d;
+};
+
 const getStartOfWeek = (date = new Date()) => {
   const d = new Date(date);
   const day = d.getDay();
@@ -58,6 +65,7 @@ module.exports = {
   formatDate,
   getStartOfDay,
   getEndOfDay,
+  applyTimeToDate,
   getStartOfWeek,
   getEndOfWeek,
   getStartOfMonth,

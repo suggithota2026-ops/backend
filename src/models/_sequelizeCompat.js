@@ -207,7 +207,7 @@ function applySequelizeCompat(schema) {
 
   // ---- Instance helpers ----
   schema.methods.update = async function updateCompat(updateData) {
-    Object.assign(this, updateData);
+    this.set(updateData);
     return this.save();
   };
 
@@ -216,9 +216,11 @@ function applySequelizeCompat(schema) {
   };
 
   schema.methods.reload = async function reloadCompat() {
-    const fresh = await this.constructor.findOne({ _id: this._id });
+    // Models use numeric `id` (see findByPk); avoid querying by _id after Object.assign corruption
+    const filter = this.id != null ? { id: this.id } : { _id: this._id };
+    const fresh = await mongooseFindOne.call(this.constructor, filter);
     if (!fresh) return null;
-    Object.assign(this, fresh.toObject());
+    this.overwrite(fresh.toObject());
     return this;
   };
 

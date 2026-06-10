@@ -249,7 +249,7 @@ const createProduct = async (request, reply) => {
     // Get category name for response
     const productWithCategory = {
       ...product.toJSON(),
-      category: { name: category.name },
+      category: { id: categoryId, name: category.name },
     };
 
     return sendSuccess(reply, productWithCategory, 'Product created successfully', 201);
