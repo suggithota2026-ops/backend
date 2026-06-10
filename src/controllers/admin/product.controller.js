@@ -255,7 +255,10 @@ const createProduct = async (request, reply) => {
     return sendSuccess(reply, productWithCategory, 'Product created successfully', 201);
   } catch (error) {
     logger.error('Error creating product:', error);
-    return sendError(reply, 'Failed to create product', 500);
+    if (error?.code === 11000) {
+      return sendError(reply, 'Product ID conflict. Please try again.', 409);
+    }
+    return sendError(reply, error.message || 'Failed to create product', 500);
   }
 };
 
