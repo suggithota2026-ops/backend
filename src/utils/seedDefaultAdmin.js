@@ -20,17 +20,26 @@ async function seedDefaultAdmin() {
 
   const hashedPassword = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
 
+  const baseUpdate = {
+    password: hashedPassword,
+    name: DEFAULT_ADMIN_NAME,
+    role: 'ADMIN',
+    isActive: true,
+  };
+
   if (existingByMobile) {
-    await Admin.update(
-      {
-        username,
-        password: hashedPassword,
-        name: DEFAULT_ADMIN_NAME,
-        role: 'ADMIN',
-        isActive: true,
-      },
-      { where: { id: existingByMobile.id } }
-    );
+    const updateData = { ...baseUpdate };
+
+    // Avoid unique-index conflict when another admin already owns this username.
+    if (!existingByUsername || existingByUsername.id === existingByMobile.id) {
+      updateData.username = username;
+    } else {
+      logger.warn(
+        `Keeping username for mobile ${mobileNumber}: "${username}" is already assigned to another admin`
+      );
+    }
+
+    await Admin.update(updateData, { where: { id: existingByMobile.id } });
     logger.info(`Updated default admin for mobile ${mobileNumber}`);
     return;
   }
@@ -41,19 +50,17 @@ async function seedDefaultAdmin() {
     });
 
     if (mobileTakenByOtherAdmin && mobileTakenByOtherAdmin.id !== existingByUsername.id) {
+      await Admin.update(baseUpdate, { where: { id: existingByUsername.id } });
       logger.warn(
-        `Could not update default admin username ${username} to mobile ${mobileNumber}: mobile is already assigned to another admin`
+        `Updated credentials for username ${username}; could not assign mobile ${mobileNumber} because it belongs to another admin`
       );
       return;
     }
 
     await Admin.update(
       {
+        ...baseUpdate,
         mobileNumber,
-        password: hashedPassword,
-        name: DEFAULT_ADMIN_NAME,
-        role: 'ADMIN',
-        isActive: true,
       },
       { where: { id: existingByUsername.id } }
     );

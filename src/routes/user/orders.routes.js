@@ -3,6 +3,7 @@ const {
   createOrder,
   getOrders,
   getOrder,
+  updateOrder,
   reorder,
   getInvoice,
 } = require('../../controllers/user/order.controller');
@@ -11,6 +12,7 @@ const { sendValidationError } = require('../../utils/response');
 const logger = require('../../utils/logger');
 const {
   createOrderSchema,
+  updateOrderSchema,
   reorderSchema,
 } = require('../../validations/order.validation');
 
@@ -99,6 +101,54 @@ const orderRoutes = async (fastify, options) => {
     },
     preHandler: [authenticate],
   }, getOrder);
+
+  fastify.put('/orders/:id', {
+    schema: {
+      tags: ['user'],
+      summary: 'Update pending order',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['items'],
+        properties: {
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['product', 'quantity'],
+              properties: {
+                product: { type: 'string' },
+                quantity: { type: 'number' },
+              },
+            },
+          },
+          specialInstructions: { type: 'string' },
+          deliveryTime: { type: 'string', format: 'date-time' },
+        },
+      },
+    },
+    preHandler: [authenticate],
+    preValidation: async (request, reply) => {
+      if (request.body && request.body.items && Array.isArray(request.body.items)) {
+        request.body.items = request.body.items.map((item) => ({
+          ...item,
+          product: String(item.product),
+          quantity: typeof item.quantity === 'string' ? parseFloat(item.quantity) : item.quantity,
+        }));
+      }
+
+      const { error } = updateOrderSchema.validate(request.body);
+      if (error) {
+        return sendValidationError(reply, error.details);
+      }
+    },
+  }, updateOrder);
 
   fastify.post('/orders/reorder', {
     schema: {
