@@ -7,7 +7,7 @@ const { sendOrderNotification } = require('../../services/notification.service')
 const { generateInvoice } = require('../../services/invoice.service');
 const { ORDER_STATUS } = require('../../config/constants');
 const logger = require('../../utils/logger');
-const { getStartOfDay, getEndOfDay, applyTimeToDate } = require('../../utils/date');
+const { getStartOfDay, getEndOfDay } = require('../../utils/date');
 const { attachHotelsToOrders } = require('../../utils/orderEnrichment');
 
 const getOrders = async (request, reply) => {
@@ -265,24 +265,39 @@ const generateOrderInvoice = async (request, reply) => {
   }
 };
 
+const parseQueryDateTime = (dateTimeStr, endOfMinute = false) => {
+  const match = dateTimeStr.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+  const [, datePart, hours, minutes] = match;
+  const [year, month, day] = datePart.split('-').map(Number);
+  return new Date(
+    year,
+    month - 1,
+    day,
+    Number(hours),
+    Number(minutes),
+    endOfMinute ? 59 : 0,
+    endOfMinute ? 999 : 0
+  );
+};
+
 const getTodaysOrdersSummary = async (request, reply) => {
   try {
-    const { date, startTime, endTime } = request.query;
-    const baseDate = date
-      ? (() => {
-        const [year, month, day] = date.split('-').map(Number);
-        return new Date(year, month - 1, day);
-      })()
-      : new Date();
-    const rangeStart = startTime
-      ? applyTimeToDate(baseDate, startTime)
-      : getStartOfDay(baseDate);
-    const rangeEnd = endTime
-      ? applyTimeToDate(baseDate, endTime, true)
-      : getEndOfDay(baseDate);
+    const { startDateTime, endDateTime } = request.query;
+    const now = new Date();
+    const rangeStart = startDateTime
+      ? parseQueryDateTime(startDateTime)
+      : getStartOfDay(now);
+    const rangeEnd = endDateTime
+      ? parseQueryDateTime(endDateTime, true)
+      : getEndOfDay(now);
 
-    if (rangeStart > rangeEnd) {
-      return sendError(reply, 'Start time must be before end time', 400);
+    if (!rangeStart || !rangeEnd) {
+      return sendError(reply, 'Invalid date-time range', 400);
+    }
+
+    if (rangeStart >= rangeEnd) {
+      return sendError(reply, 'Start date-time must be before end date-time', 400);
     }
 
     // Fetch orders within the selected date/time range
@@ -348,12 +363,16 @@ const getTodaysOrdersSummary = async (request, reply) => {
     // Sort by item name
     summaryArray.sort((a, b) => a.itemName.localeCompare(b.itemName));
 
-    const displayDate = date || new Date().toISOString().split('T')[0];
+    const formatTime = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const formatDateOnly = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
     return sendSuccess(reply, {
-      date: displayDate,
-      startTime: startTime || '00:00',
-      endTime: endTime || '23:59',
+      startDate: formatDateOnly(rangeStart),
+      endDate: formatDateOnly(rangeEnd),
+      startTime: formatTime(rangeStart),
+      endTime: formatTime(rangeEnd),
+      startDateTime: rangeStart.toISOString(),
+      endDateTime: rangeEnd.toISOString(),
       totalOrders: orders.length,
       summary: summaryArray
     }, 'Orders summary retrieved successfully');
