@@ -12,6 +12,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
   'http://127.0.0.1:3002',
+  'http://localhost:52402',
 ];
 
 function expandOriginVariants(origin) {
@@ -51,6 +52,18 @@ function getAllowedOrigins() {
   return [...origins];
 }
 
+function isLocalDevOrigin(origin) {
+  try {
+    const url = new URL(origin);
+    return (
+      url.protocol === 'http:' &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function corsPlugin(fastify, options) {
   const allowedOrigins = getAllowedOrigins();
   const isProduction = process.env.NODE_ENV === 'production';
@@ -60,6 +73,8 @@ async function corsPlugin(fastify, options) {
       // No origin (e.g. Postman, server-to-server) – allow
       if (!origin) return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
+      // Flutter web / local dev uses random ports (e.g. localhost:62060)
+      if (isLocalDevOrigin(origin)) return cb(null, true);
       // In development, allow any origin; in production only allowed list
       if (!isProduction) return cb(null, true);
       cb(new Error('Not allowed by CORS'), false);

@@ -42,8 +42,23 @@ const reorderSchema = Joi.object({
   deliveryTime: Joi.date().optional(),
 }).unknown(true);
 
+const updateOrderSchema = Joi.object({
+  items: Joi.array()
+    .items(
+      Joi.object({
+        product: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+        quantity: Joi.number().min(0.01).required(),
+      })
+    )
+    .min(1)
+    .required(),
+  specialInstructions: Joi.string().trim().max(500).optional().allow(''),
+  deliveryTime: Joi.date().optional(),
+}).options({ stripUnknown: true });
+
 module.exports = {
   createOrderSchema,
+  updateOrderSchema,
   updateOrderStatusSchema,
   reorderSchema,
 };

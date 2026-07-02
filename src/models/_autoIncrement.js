@@ -31,6 +31,51 @@ async function allocateNextId(Model, sequenceName) {
   throw new Error(`Failed to allocate unique id for ${sequenceName}`);
 }
 
+function parseOrderNumberSeq(orderNumber) {
+  const match = String(orderNumber || '').match(/ORD(\d+)/i);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+async function allocateNextOrderNumber(Model, sequenceName = 'order_numbers') {
+  const [latest] = await Model.find({ orderNumber: { $exists: true, $ne: null } })
+    .sort({ orderNumber: -1 })
+    .limit(1)
+    .select('orderNumber')
+    .lean();
+
+  const maxFromOrders = parseOrderNumberSeq(latest?.orderNumber);
+
+  const counter = await Counter.findById(sequenceName).lean();
+  if (!counter || counter.seq < maxFromOrders) {
+    await Counter.findByIdAndUpdate(sequenceName, { seq: maxFromOrders }, { upsert: true });
+  }
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const ret = await Counter.findByIdAndUpdate(
+      sequenceName,
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    ).lean();
+
+    const orderNumber = `ORD${String(ret.seq).padStart(6, '0')}`;
+    const exists = await Model.findOne({ orderNumber });
+    if (!exists) return orderNumber;
+
+    const [latestAgain] = await Model.find({ orderNumber: { $exists: true, $ne: null } })
+      .sort({ orderNumber: -1 })
+      .limit(1)
+      .select('orderNumber')
+      .lean();
+
+    const latestSeq = parseOrderNumberSeq(latestAgain?.orderNumber);
+    if (latestSeq >= ret.seq) {
+      await Counter.findByIdAndUpdate(sequenceName, { seq: latestSeq }, { upsert: true });
+    }
+  }
+
+  throw new Error('Failed to allocate unique order number');
+}
+
 function applyAutoIncrement(schema, { sequenceName }) {
   schema.add({
     id: { type: Number, unique: true, index: true },
@@ -48,5 +93,5 @@ function applyAutoIncrement(schema, { sequenceName }) {
   });
 }
 
-module.exports = { applyAutoIncrement };
+module.exports = { applyAutoIncrement, allocateNextOrderNumber };
 

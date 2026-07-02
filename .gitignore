@@ -23,3 +23,5 @@ test_api_check_native.js
 # Non-production utility scripts
 src/examples/
 src/scripts/
+
+backend\backend\test.js

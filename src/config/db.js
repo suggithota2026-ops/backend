@@ -12,6 +12,8 @@ const connectDB = async () => {
     // Avoid re-connecting in hot-reload / tests
     if (mongoose.connection.readyState === 1) return;
 
+    console.log('Mongo URI:', MONGODB_URI?.replace(/\/\/(.*?):(.*?)@/, '//$1:****@'));
+
     await mongoose.connect(MONGODB_URI, {
       autoIndex: NODE_ENV !== 'production',
       serverSelectionTimeoutMS: 10000,

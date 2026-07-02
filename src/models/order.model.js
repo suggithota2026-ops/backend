@@ -1,5 +1,5 @@
 const { mongoose } = require('../config/db');
-const { applyAutoIncrement } = require('./_autoIncrement');
+const { applyAutoIncrement, allocateNextOrderNumber } = require('./_autoIncrement');
 const { applySequelizeCompat } = require('./_sequelizeCompat');
 const { ORDER_STATUS, PAYMENT_METHOD } = require('../config/constants');
 
@@ -30,8 +30,7 @@ applySequelizeCompat(OrderSchema);
 OrderSchema.pre('save', async function preSave(next) {
   try {
     if (this.isNew && !this.orderNumber) {
-      const count = await this.constructor.countDocuments({});
-      this.orderNumber = `ORD${String(count + 1).padStart(6, '0')}`;
+      this.orderNumber = await allocateNextOrderNumber(this.constructor);
     }
     next();
   } catch (e) {
