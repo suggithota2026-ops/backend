@@ -130,9 +130,6 @@ const createOrder = async (request, reply) => {
       status: ORDER_STATUS.PENDING,
     });
 
-    // Reload order to get orderNumber (generated in beforeCreate hook)
-    await order.reload();
-
     // Update product stock - REMOVED
     // We are now using 'stock' as Minimum Order Quantity, so it should not decrease.
     /*
@@ -175,7 +172,11 @@ const createOrder = async (request, reply) => {
     return sendSuccess(reply, responseData, 'Order placed successfully', 201);
   } catch (error) {
     logger.error('Error creating order:', error);
-    return sendError(reply, 'Failed to create order', 500);
+    const message =
+      process.env.NODE_ENV === 'production'
+        ? 'Failed to create order'
+        : error.message || 'Failed to create order';
+    return sendError(reply, message, 500);
   }
 };
 

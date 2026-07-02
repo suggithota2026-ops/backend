@@ -10,6 +10,11 @@ const rateLimit = async (request, reply) => {
     return;
   }
 
+  // CORS preflight must not be rate-limited
+  if (request.method === 'OPTIONS') {
+    return;
+  }
+
   // Skip rate limiting for static files and health check
   const path = request.url;
   if (path.startsWith('/uploads/') || path === '/health' || path === '/api-docs' || path.startsWith('/api-docs/')) {
