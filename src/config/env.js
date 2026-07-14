@@ -1,6 +1,5 @@
 // Environment variables loader
-const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+require('dotenv').config();
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
