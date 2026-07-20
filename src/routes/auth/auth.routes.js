@@ -135,9 +135,10 @@ const authRoutes = async (fastify, options) => {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['hotelName', 'address'],
+        additionalProperties: true,
         properties: {
           hotelName: { type: 'string' },
+          name: { type: 'string' },
           address: { type: 'string' },
           gstNumber: { type: 'string' },
           fcmToken: { type: 'string' },
@@ -146,7 +147,7 @@ const authRoutes = async (fastify, options) => {
     },
     preHandler: [authenticate],
     preValidation: async (request, reply) => {
-      const { error } = setupProfileSchema.validate(request.body);
+      const { error } = setupProfileSchema.validate(request.body || {}, { allowUnknown: true });
       if (error) {
         return sendValidationError(reply, error.details);
       }

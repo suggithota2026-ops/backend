@@ -37,8 +37,27 @@ const getProfile = async (request, reply) => {
 
 const updateProfile = async (request, reply) => {
   try {
-    const userId = request.user.id;
-    const { hotelName, address, gstNumber } = request.body;
+    const userId = Number(request.user.id);
+    const body = request.body || {};
+
+    // Support common client field aliases
+    const hotelName = body.hotelName ?? body.name ?? body.hotel_name;
+    const address = body.address ?? body.hotelAddress ?? body.hotel_address;
+    const gstNumber = body.gstNumber ?? body.gst_number ?? body.gstin ?? body.gst;
+    const fcmToken = body.fcmToken ?? body.fcm_token;
+
+    if (
+      hotelName === undefined &&
+      address === undefined &&
+      gstNumber === undefined &&
+      fcmToken === undefined
+    ) {
+      return sendError(
+        reply,
+        'No profile fields to update. Send hotelName, address, and/or gstNumber.',
+        400
+      );
+    }
 
     const user = await User.findByPk(userId);
     if (!user) {
@@ -46,15 +65,54 @@ const updateProfile = async (request, reply) => {
     }
 
     const updateData = {};
-    if (hotelName) updateData.hotelName = hotelName;
-    if (address) updateData.address = address;
-    if (gstNumber !== undefined) {
-      updateData.gstNumber = gstNumber ? gstNumber.toUpperCase() : null;
+
+    if (hotelName !== undefined) {
+      const value = String(hotelName).trim();
+      updateData.hotelName = value || null;
     }
 
-    await user.update(updateData);
+    if (address !== undefined) {
+      const value = String(address).trim();
+      updateData.address = value || null;
+    }
 
-    return sendSuccess(reply, user, 'Profile updated successfully');
+    if (gstNumber !== undefined) {
+      const gst = String(gstNumber).trim().toUpperCase();
+      if (
+        gst &&
+        !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gst)
+      ) {
+        return sendError(reply, 'Invalid GST number format', 400);
+      }
+      updateData.gstNumber = gst || null;
+    }
+
+    if (fcmToken !== undefined) {
+      updateData.fcmToken = fcmToken ? String(fcmToken).trim() : null;
+    }
+
+    // Persist with $set so changes always write to MongoDB
+    const updated = await User.findOneAndUpdate(
+      { id: userId },
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select('-otpCode -otpExpiresAt');
+
+    if (!updated) {
+      return sendError(reply, 'User not found', 404);
+    }
+
+    logger.info(
+      `Profile updated for user ${userId}: ${Object.keys(updateData).join(', ')}`
+    );
+
+    const userJson = updated.toJSON ? updated.toJSON() : updated;
+
+    return sendSuccess(
+      reply,
+      { user: userJson },
+      'Profile updated successfully'
+    );
   } catch (error) {
     logger.error('Error updating profile:', error);
     return sendError(reply, 'Failed to update profile', 500);

@@ -235,32 +235,57 @@ const resendOTP = async (request, reply) => {
 // POST /api/auth/setup-profile
 const setupProfile = async (request, reply) => {
   try {
-    const userId = request.user.id;
-    const { hotelName, address, gstNumber, fcmToken } = request.body;
+    const userId = Number(request.user.id);
+    const body = request.body || {};
+    const hotelName = body.hotelName ?? body.name ?? body.hotel_name;
+    const address = body.address ?? body.hotelAddress ?? body.hotel_address;
+    const gstNumber = body.gstNumber ?? body.gst_number ?? body.gstin ?? body.gst;
+    const fcmToken = body.fcmToken ?? body.fcm_token;
 
-    const user = await User.findByPk(userId);
-    if (!user) {
+    if (!hotelName || !String(hotelName).trim()) {
+      return sendError(reply, 'Hotel name is required', 400);
+    }
+    if (!address || !String(address).trim()) {
+      return sendError(reply, 'Address is required', 400);
+    }
+
+    const updateData = {
+      hotelName: String(hotelName).trim(),
+      address: String(address).trim(),
+    };
+
+    if (gstNumber !== undefined) {
+      const gst = String(gstNumber).trim().toUpperCase();
+      if (
+        gst &&
+        !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gst)
+      ) {
+        return sendError(reply, 'Invalid GST number format', 400);
+      }
+      updateData.gstNumber = gst || null;
+    }
+
+    if (fcmToken) {
+      updateData.fcmToken = String(fcmToken).trim();
+    }
+
+    const updated = await User.findOneAndUpdate(
+      { id: userId },
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select('-otpCode -otpExpiresAt');
+
+    if (!updated) {
       return sendError(reply, 'User not found', 404);
     }
 
-    user.hotelName = hotelName;
-    user.address = address;
-    if (gstNumber) {
-      user.gstNumber = gstNumber.toUpperCase();
-    }
-    if (fcmToken) {
-      user.fcmToken = fcmToken;
-    }
-
-    await user.save();
-
     return sendSuccess(reply, {
       user: {
-        id: user.id,
-        mobileNumber: user.mobileNumber,
-        hotelName: user.hotelName,
-        address: user.address,
-        gstNumber: user.gstNumber,
+        id: updated.id,
+        mobileNumber: updated.mobileNumber,
+        hotelName: updated.hotelName,
+        address: updated.address,
+        gstNumber: updated.gstNumber,
       },
     }, 'Profile updated successfully');
   } catch (error) {

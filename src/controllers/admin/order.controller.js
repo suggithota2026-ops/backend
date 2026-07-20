@@ -139,6 +139,14 @@ const updateOrder = async (request, reply) => {
 
     await order.reload();
 
+    // Items changed — refresh invoice so deleted products are not billed
+    if (items && Array.isArray(items)) {
+      const existingInvoice = await Invoice.findOne({ where: { orderId: order.id } });
+      if (existingInvoice) {
+        await generateInvoice(order.id, { forceRegenerate: true });
+      }
+    }
+
     // Send notification based on status change
     if (status && status !== oldStatus) {
       if (status === ORDER_STATUS.CONFIRMED && oldStatus === ORDER_STATUS.PENDING) {
@@ -148,7 +156,7 @@ const updateOrder = async (request, reply) => {
       } else if (status === ORDER_STATUS.DELIVERED && oldStatus !== ORDER_STATUS.DELIVERED) {
         await sendOrderNotification(order, 'order_delivered', order.hotelId);
         // Generate invoice when order is delivered
-        await generateInvoice(order.id);
+        await generateInvoice(order.id, { forceRegenerate: true });
       } else if (status === ORDER_STATUS.CANCELLED && oldStatus !== ORDER_STATUS.CANCELLED) {
         await sendOrderNotification(order, 'order_cancelled', order.hotelId);
       }
@@ -209,7 +217,7 @@ const updateOrderStatus = async (request, reply) => {
     } else if (status === ORDER_STATUS.DELIVERED && oldStatus !== ORDER_STATUS.DELIVERED) {
       await sendOrderNotification(order, 'order_delivered', order.hotelId);
       // Generate invoice when order is delivered
-      await generateInvoice(order.id);
+      await generateInvoice(order.id, { forceRegenerate: true });
     } else if (status === ORDER_STATUS.CANCELLED && oldStatus !== ORDER_STATUS.CANCELLED) {
       await sendOrderNotification(order, 'order_cancelled', order.hotelId);
     }

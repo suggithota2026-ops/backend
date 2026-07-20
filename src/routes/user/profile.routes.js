@@ -26,16 +26,19 @@ const profileRoutes = async (fastify, options) => {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
+        additionalProperties: true,
         properties: {
           hotelName: { type: 'string' },
+          name: { type: 'string' },
           address: { type: 'string' },
           gstNumber: { type: 'string' },
+          fcmToken: { type: 'string' },
         },
       },
     },
     preHandler: [authenticate],
     preValidation: async (request, reply) => {
-      const { error } = setupProfileSchema.validate(request.body, { allowUnknown: true });
+      const { error } = setupProfileSchema.validate(request.body || {}, { allowUnknown: true });
       if (error) {
         return sendValidationError(reply, error.details);
       }
@@ -49,16 +52,19 @@ const profileRoutes = async (fastify, options) => {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
+        additionalProperties: true,
         properties: {
           hotelName: { type: 'string' },
+          name: { type: 'string' },
           address: { type: 'string' },
           gstNumber: { type: 'string' },
+          fcmToken: { type: 'string' },
         },
       },
     },
     preHandler: [authenticate],
     preValidation: async (request, reply) => {
-      const { error } = setupProfileSchema.validate(request.body, { allowUnknown: true });
+      const { error } = setupProfileSchema.validate(request.body || {}, { allowUnknown: true });
       if (error) {
         return sendValidationError(reply, error.details);
       }

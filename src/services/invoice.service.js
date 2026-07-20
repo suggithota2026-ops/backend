@@ -6,19 +6,36 @@ const logger = require('../utils/logger');
 const { INVOICE_STATUS } = require('../config/constants');
 const { attachHotelsToOrders } = require('../utils/orderEnrichment');
 
-const generateInvoice = async (orderId) => {
+const generateInvoice = async (orderId, { forceRegenerate = false } = {}) => {
   try {
-    const orderRaw = await Order.findByPk(orderId);
-    const order = await attachHotelsToOrders(orderRaw);
+    const orderDoc = await Order.findByPk(orderId);
 
-    if (!order) {
+    if (!orderDoc) {
       throw new Error('Order not found');
     }
 
+    const order = await attachHotelsToOrders(orderDoc);
+
     // Check if invoice already exists
     let invoice = await Invoice.findOne({ where: { orderId } });
-    if (invoice) {
+    if (invoice && !forceRegenerate) {
       return invoice;
+    }
+
+    // Drop stale invoice so PDF/totals match current order items
+    if (invoice && forceRegenerate) {
+      const fs = require('fs');
+      if (invoice.pdfPath && fs.existsSync(invoice.pdfPath)) {
+        try {
+          fs.unlinkSync(invoice.pdfPath);
+        } catch (err) {
+          logger.warn(`Failed to delete old invoice PDF: ${invoice.pdfPath}`);
+        }
+      }
+      await invoice.destroy();
+      invoice = null;
+      orderDoc.invoiceId = null;
+      await orderDoc.save();
     }
 
     // Calculate GST if hotel has GST number
@@ -40,8 +57,8 @@ const generateInvoice = async (orderId) => {
       status: INVOICE_STATUS.GENERATED,
     });
 
-    // Generate PDF
-    const { filePath, fileName } = await generateInvoicePDF(
+    // Generate PDF from current order items
+    const { filePath } = await generateInvoicePDF(
       invoice,
       order,
       order.hotel
@@ -51,8 +68,8 @@ const generateInvoice = async (orderId) => {
     await invoice.save();
 
     // Update order with invoice reference
-    order.invoiceId = invoice.id;
-    await order.save();
+    orderDoc.invoiceId = invoice.id;
+    await orderDoc.save();
 
     logger.info(`Invoice generated: ${invoice.invoiceNumber}`);
     return invoice;

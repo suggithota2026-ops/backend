@@ -208,6 +208,10 @@ function applySequelizeCompat(schema) {
   // ---- Instance helpers ----
   schema.methods.update = async function updateCompat(updateData) {
     this.set(updateData);
+    // Mixed / nested arrays are not always detected as changed by Mongoose
+    if (updateData && Object.prototype.hasOwnProperty.call(updateData, 'items')) {
+      this.markModified('items');
+    }
     return this.save();
   };
 
