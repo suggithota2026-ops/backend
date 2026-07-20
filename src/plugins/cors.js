@@ -52,22 +52,51 @@ function getAllowedOrigins() {
   return [...origins];
 }
 
+function isLocalDevOrigin(origin) {
+  try {
+    const url = new URL(origin);
+    return (
+      url.protocol === 'http:' &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isOriginAllowed(origin, allowedOrigins, isProduction) {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  // Flutter web dev server uses random ports (e.g. http://localhost:61629)
+  if (isLocalDevOrigin(origin)) return true;
+  if (!isProduction) return true;
+  return false;
+}
+
 async function corsPlugin(fastify, options) {
   const allowedOrigins = getAllowedOrigins();
   const isProduction = process.env.NODE_ENV === 'production';
 
   await fastify.register(fastifyCors, {
     origin: (origin, cb) => {
-      // No origin (e.g. Postman, server-to-server) – allow
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      // In development, allow any origin; in production only allowed list
-      if (!isProduction) return cb(null, true);
-      cb(new Error('Not allowed by CORS'), false);
+      const allowed = isOriginAllowed(origin, allowedOrigins, isProduction);
+      if (!allowed && origin) {
+        fastify.log.warn({ origin }, 'CORS origin rejected');
+      }
+      // Never pass Error to cb — that becomes a 500 without CORS headers on preflight
+      cb(null, allowed);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
 }
 

@@ -23,18 +23,16 @@ const InvoiceSchema = new mongoose.Schema(
 applyAutoIncrement(InvoiceSchema, { sequenceName: 'invoices' });
 applySequelizeCompat(InvoiceSchema);
 
-InvoiceSchema.pre('save', async function preSave(next) {
-  try {
-    if (this.isNew && !this.invoiceNumber) {
-      const year = new Date().getFullYear();
-      const count = await this.constructor.countDocuments({
-        createdAt: { $gte: new Date(`${year}-01-01T00:00:00.000Z`), $lt: new Date(`${year + 1}-01-01T00:00:00.000Z`) },
-      });
-      this.invoiceNumber = `INV${year}${String(count + 1).padStart(5, '0')}`;
-    }
-    next();
-  } catch (e) {
-    next(e);
+InvoiceSchema.pre('save', async function preSave() {
+  if (this.isNew && !this.invoiceNumber) {
+    const year = new Date().getFullYear();
+    const count = await this.constructor.countDocuments({
+      createdAt: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lt: new Date(`${year + 1}-01-01T00:00:00.000Z`),
+      },
+    });
+    this.invoiceNumber = `INV${year}${String(count + 1).padStart(5, '0')}`;
   }
 });
 

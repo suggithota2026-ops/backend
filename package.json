@@ -9,8 +9,7 @@
     "build": "node src/server.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "seed:demo-orders": "node scripts/seed-demo-orders.js"
+    "test:coverage": "jest --coverage"
   },
   "keywords": [
     "fastify",

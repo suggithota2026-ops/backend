@@ -1,15 +1,15 @@
 const Counter = require('./_counter.model');
 
 async function allocateNextId(Model, sequenceName) {
-  const [maxDoc] = await Model.find().sort({ id: -1 }).limit(1).select('id').lean();
-  const maxId = maxDoc?.id || 0;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const [maxDoc] = await Model.find().sort({ id: -1 }).limit(1).select('id').lean();
+    const maxId = maxDoc?.id || 0;
 
-  const counter = await Counter.findById(sequenceName).lean();
-  if (!counter || counter.seq < maxId) {
-    await Counter.findByIdAndUpdate(sequenceName, { seq: maxId }, { upsert: true });
-  }
+    const counter = await Counter.findById(sequenceName).lean();
+    if (!counter || counter.seq < maxId) {
+      await Counter.findByIdAndUpdate(sequenceName, { seq: maxId }, { upsert: true });
+    }
 
-  for (let attempt = 0; attempt < 5; attempt++) {
     const ret = await Counter.findByIdAndUpdate(
       sequenceName,
       { $inc: { seq: 1 } },
@@ -17,15 +17,8 @@ async function allocateNextId(Model, sequenceName) {
     ).lean();
 
     const candidateId = ret.seq;
-    // Use findByPk (compat layer) — Model.findOne().select() is not chainable there
     const exists = await Model.findByPk(candidateId);
     if (!exists) return candidateId;
-
-    const [latest] = await Model.find().sort({ id: -1 }).limit(1).select('id').lean();
-    const latestId = latest?.id || 0;
-    if (latestId >= candidateId) {
-      await Counter.findByIdAndUpdate(sequenceName, { seq: latestId }, { upsert: true });
-    }
   }
 
   throw new Error(`Failed to allocate unique id for ${sequenceName}`);
@@ -50,7 +43,7 @@ async function allocateNextOrderNumber(Model, sequenceName = 'order_numbers') {
     await Counter.findByIdAndUpdate(sequenceName, { seq: maxFromOrders }, { upsert: true });
   }
 
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     const ret = await Counter.findByIdAndUpdate(
       sequenceName,
       { $inc: { seq: 1 } },
@@ -81,14 +74,9 @@ function applyAutoIncrement(schema, { sequenceName }) {
     id: { type: Number, unique: true, index: true },
   });
 
-  schema.pre('save', async function preSave(next) {
-    try {
-      if (this.isNew && (this.id === undefined || this.id === null)) {
-        this.id = await allocateNextId(this.constructor, sequenceName);
-      }
-      next();
-    } catch (err) {
-      next(err);
+  schema.pre('save', async function preSave() {
+    if (this.isNew && (this.id === undefined || this.id === null)) {
+      this.id = await allocateNextId(this.constructor, sequenceName);
     }
   });
 }

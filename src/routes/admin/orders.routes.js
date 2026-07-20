@@ -156,8 +156,9 @@ const orderRoutes = async (fastify, options) => {
       querystring: {
         type: 'object',
         properties: {
-          startDateTime: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?$' },
-          endDateTime: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?$' },
+          date: { type: 'string', format: 'date' },
+          startTime: { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
+          endTime: { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
         },
       },
     },
