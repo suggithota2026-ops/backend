@@ -12,22 +12,32 @@ const getFileUrl = (filePath) => {
   return `/uploads/${filePath.replace(/\\/g, '/')}`;
 };
 
+const getRequestBaseUrl = (request) => {
+  if (request.headers?.host) {
+    const protocol = request.protocol || (request.headers?.['x-forwarded-proto'] || 'http');
+    return `${protocol}://${request.headers.host}`;
+  }
+  const host = request.hostname || 'localhost';
+  const port = request.socket?.localPort || 3000;
+  const protocol = request.protocol || 'http';
+  return `${protocol}://${host}:${port}`;
+};
+
+/** Pass through Cloudinary/full URLs; prefix local paths with request host */
+const transformImageUrl = (image, request) => {
+  if (!image || typeof image !== 'string') return image || null;
+  if (image.startsWith('http://') || image.startsWith('https://')) {
+    return image;
+  }
+  const baseUrl = getRequestBaseUrl(request);
+  const imagePath = image.startsWith('/uploads/') ? image : getFileUrl(image);
+  return `${baseUrl}${imagePath.startsWith('/') ? imagePath : `/${imagePath}`}`;
+};
+
 // Helper function to convert image paths to full URLs
 const transformProductImages = (product, request) => {
   const productData = product.toJSON ? product.toJSON() : product;
-  // Get base URL from request - use headers.host if available (includes port)
-  let baseUrl;
-  if (request.headers?.host) {
-    // headers.host already includes port (e.g., "192.168.0.45:3000")
-    const protocol = request.protocol || (request.headers?.['x-forwarded-proto'] || 'http');
-    baseUrl = `${protocol}://${request.headers.host}`;
-  } else {
-    // Fallback: construct from hostname and port
-    const host = request.hostname || 'localhost';
-    const port = request.socket?.localPort || 3000;
-    const protocol = request.protocol || 'http';
-    baseUrl = `${protocol}://${host}:${port}`;
-  }
+  const baseUrl = getRequestBaseUrl(request);
 
   if (productData.images && Array.isArray(productData.images)) {
     productData.images = productData.images.map(img => {
@@ -84,7 +94,15 @@ const getCategories = async (request, reply) => {
       ],
     });
 
-    return sendSuccess(reply, categories, 'Categories retrieved successfully');
+    const categoriesWithImages = categories.map((category) => {
+      const data = category.toJSON ? category.toJSON() : category;
+      return {
+        ...data,
+        image: transformImageUrl(data.image, request),
+      };
+    });
+
+    return sendSuccess(reply, categoriesWithImages, 'Categories retrieved successfully');
   } catch (error) {
     logger.error('Error fetching categories:', error);
     return sendError(reply, 'Failed to fetch categories', 500);
@@ -210,24 +228,7 @@ const getProduct = async (request, reply) => {
     // Transform image paths to full URLs for products
     const productsWithImages = products.map(product => transformProductImages(product, request));
 
-    // Transform category image if it exists
-    let baseUrl;
-    if (request.headers?.host) {
-      // headers.host already includes port (e.g., "192.168.0.45:3000")
-      const protocol = request.protocol || (request.headers?.['x-forwarded-proto'] || 'http');
-      baseUrl = `${protocol}://${request.headers.host}`;
-    } else {
-      // Fallback: construct from hostname and port
-      const host = request.hostname || 'localhost';
-      const port = request.socket?.localPort || 3000;
-      const protocol = request.protocol || 'http';
-      baseUrl = `${protocol}://${host}:${port}`;
-    }
-    let categoryImage = category.image;
-    if (categoryImage && !categoryImage.startsWith('http://') && !categoryImage.startsWith('https://')) {
-      const imagePath = categoryImage.startsWith('/uploads/') ? categoryImage : getFileUrl(categoryImage);
-      categoryImage = `${baseUrl}${imagePath}`;
-    }
+    const categoryImage = transformImageUrl(category.image, request);
 
     // Return products with category information
     const productsWithCategory = {
