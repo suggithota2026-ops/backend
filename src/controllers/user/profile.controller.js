@@ -5,6 +5,26 @@ const Notification = require('../../models/notification.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
 
+const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const formatProfileResponse = (user) => {
+  const data = user.toJSON ? user.toJSON() : user;
+  return {
+    ...data,
+    personalDetails: {
+      name: data.name || null,
+      mobileNumber: data.mobileNumber || null,
+      email: data.email || null,
+    },
+    businessDetails: {
+      hotelName: data.hotelName || null,
+      gstNumber: data.gstNumber || null,
+      address: data.address || null,
+    },
+  };
+};
+
 const getProfile = async (request, reply) => {
   try {
     const userId = request.user.id;
@@ -23,7 +43,7 @@ const getProfile = async (request, reply) => {
     ]);
 
     return sendSuccess(reply, {
-      user,
+      user: formatProfileResponse(user),
       orderStats: orderStats.map(stat => ({
         _id: stat._id,
         count: parseInt(stat.count || 0),
@@ -39,14 +59,37 @@ const updateProfile = async (request, reply) => {
   try {
     const userId = Number(request.user.id);
     const body = request.body || {};
+    const personal = body.personalDetails || body.personal || {};
+    const business = body.businessDetails || body.business || {};
 
-    // Support common client field aliases
-    const hotelName = body.hotelName ?? body.name ?? body.hotel_name;
-    const address = body.address ?? body.hotelAddress ?? body.hotel_address;
-    const gstNumber = body.gstNumber ?? body.gst_number ?? body.gstin ?? body.gst;
+    // Personal details (separate from business)
+    const personalName =
+      personal.name ?? body.personalName ?? body.name;
+    const email = personal.email ?? body.email;
+
+    // Business details (separate from personal)
+    const hotelName =
+      business.hotelName ??
+      business.name ??
+      body.hotelName ??
+      body.hotel_name ??
+      body.businessName;
+    const address =
+      business.address ??
+      body.address ??
+      body.hotelAddress ??
+      body.hotel_address;
+    const gstNumber =
+      business.gstNumber ??
+      body.gstNumber ??
+      body.gst_number ??
+      body.gstin ??
+      body.gst;
     const fcmToken = body.fcmToken ?? body.fcm_token;
 
     if (
+      personalName === undefined &&
+      email === undefined &&
       hotelName === undefined &&
       address === undefined &&
       gstNumber === undefined &&
@@ -54,7 +97,7 @@ const updateProfile = async (request, reply) => {
     ) {
       return sendError(
         reply,
-        'No profile fields to update. Send hotelName, address, and/or gstNumber.',
+        'No profile fields to update. Send personalDetails (name, email) and/or businessDetails (hotelName, address, gstNumber).',
         400
       );
     }
@@ -66,6 +109,21 @@ const updateProfile = async (request, reply) => {
 
     const updateData = {};
 
+    // Personal
+    if (personalName !== undefined) {
+      const value = String(personalName).trim();
+      updateData.name = value || null;
+    }
+
+    if (email !== undefined) {
+      const value = String(email).trim().toLowerCase();
+      if (value && !EMAIL_REGEX.test(value)) {
+        return sendError(reply, 'Invalid email format', 400);
+      }
+      updateData.email = value || null;
+    }
+
+    // Business
     if (hotelName !== undefined) {
       const value = String(hotelName).trim();
       updateData.hotelName = value || null;
@@ -78,10 +136,7 @@ const updateProfile = async (request, reply) => {
 
     if (gstNumber !== undefined) {
       const gst = String(gstNumber).trim().toUpperCase();
-      if (
-        gst &&
-        !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gst)
-      ) {
+      if (gst && !GST_REGEX.test(gst)) {
         return sendError(reply, 'Invalid GST number format', 400);
       }
       updateData.gstNumber = gst || null;
@@ -106,11 +161,9 @@ const updateProfile = async (request, reply) => {
       `Profile updated for user ${userId}: ${Object.keys(updateData).join(', ')}`
     );
 
-    const userJson = updated.toJSON ? updated.toJSON() : updated;
-
     return sendSuccess(
       reply,
-      { user: userJson },
+      { user: formatProfileResponse(updated) },
       'Profile updated successfully'
     );
   } catch (error) {

@@ -26,17 +26,31 @@ const verifyOTPSchema = Joi.object({
 });
 
 const setupProfileSchema = Joi.object({
-  hotelName: Joi.string().trim().max(100).optional().allow('', null),
+  // Personal details
   name: Joi.string().trim().max(100).optional().allow('', null),
+  personalName: Joi.string().trim().max(100).optional().allow('', null),
+  email: Joi.string().trim().email().max(150).optional().allow('', null),
+  personalDetails: Joi.object({
+    name: Joi.string().trim().max(100).optional().allow('', null),
+    email: Joi.string().trim().email().max(150).optional().allow('', null),
+  }).optional(),
+  // Business details
+  hotelName: Joi.string().trim().max(100).optional().allow('', null),
   hotel_name: Joi.string().trim().max(100).optional().allow('', null),
+  businessName: Joi.string().trim().max(100).optional().allow('', null),
   address: Joi.string().trim().max(500).optional().allow('', null),
   hotelAddress: Joi.string().trim().max(500).optional().allow('', null),
   hotel_address: Joi.string().trim().max(500).optional().allow('', null),
-  // GST format is validated in the controller so other fields can still save
   gstNumber: Joi.string().trim().max(20).optional().allow('', null),
   gst_number: Joi.string().trim().max(20).optional().allow('', null),
   gstin: Joi.string().trim().max(20).optional().allow('', null),
   gst: Joi.string().trim().max(20).optional().allow('', null),
+  businessDetails: Joi.object({
+    hotelName: Joi.string().trim().max(100).optional().allow('', null),
+    name: Joi.string().trim().max(100).optional().allow('', null),
+    address: Joi.string().trim().max(500).optional().allow('', null),
+    gstNumber: Joi.string().trim().max(20).optional().allow('', null),
+  }).optional(),
   fcmToken: Joi.string().optional().allow('', null),
   fcm_token: Joi.string().optional().allow('', null),
 }).unknown(true);

@@ -28,11 +28,28 @@ const profileRoutes = async (fastify, options) => {
         type: 'object',
         additionalProperties: true,
         properties: {
-          hotelName: { type: 'string' },
           name: { type: 'string' },
+          email: { type: 'string' },
+          hotelName: { type: 'string' },
           address: { type: 'string' },
           gstNumber: { type: 'string' },
           fcmToken: { type: 'string' },
+          personalDetails: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              email: { type: 'string' },
+            },
+          },
+          businessDetails: {
+            type: 'object',
+            properties: {
+              hotelName: { type: 'string' },
+              name: { type: 'string' },
+              address: { type: 'string' },
+              gstNumber: { type: 'string' },
+            },
+          },
         },
       },
     },
@@ -48,17 +65,34 @@ const profileRoutes = async (fastify, options) => {
   fastify.put('/profile', {
     schema: {
       tags: ['user'],
-      summary: 'Update user profile',
+      summary: 'Update user profile (personal + business details)',
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
         additionalProperties: true,
         properties: {
-          hotelName: { type: 'string' },
           name: { type: 'string' },
+          email: { type: 'string' },
+          hotelName: { type: 'string' },
           address: { type: 'string' },
           gstNumber: { type: 'string' },
           fcmToken: { type: 'string' },
+          personalDetails: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              email: { type: 'string' },
+            },
+          },
+          businessDetails: {
+            type: 'object',
+            properties: {
+              hotelName: { type: 'string' },
+              name: { type: 'string' },
+              address: { type: 'string' },
+              gstNumber: { type: 'string' },
+            },
+          },
         },
       },
     },

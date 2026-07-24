@@ -10,6 +10,10 @@ const UserSchema = new mongoose.Schema(
     otpExpiresAt: { type: Date, default: null },
     isVerified: { type: Boolean, default: false },
     role: { type: String, enum: Object.values(ROLES), default: ROLES.HOTEL },
+    // Personal details
+    name: { type: String, default: null },
+    email: { type: String, default: null, trim: true, lowercase: true },
+    // Business details
     hotelName: { type: String, default: null },
     address: { type: String, default: null },
     gstNumber: { type: String, default: null },
