@@ -32,6 +32,19 @@ const hotelRoutes = async (fastify, options) => {
           creditLimit: { type: 'number' },
           rateType: { type: 'string' },
           pricePerUnit: { type: 'number' },
+          contractDuration: { type: 'string' },
+          contractStartDate: { type: 'string' },
+          contractEndDate: { type: 'string' },
+          customerProductPricing: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                productId: { type: 'number' },
+                fixedPrice: { type: 'number' },
+              },
+            },
+          },
         },
       },
     },

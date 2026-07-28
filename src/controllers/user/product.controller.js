@@ -4,6 +4,7 @@ const Product = require('../../models/product.model');
 const Category = require('../../models/category.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
+const { applyCustomerPricesToProducts } = require('../../services/customerPricing.service');
 
 // Helper function to get file URL (inline version if service file has issues)
 const getFileUrl = (filePath) => {
@@ -166,7 +167,7 @@ const getProducts = async (request, reply) => {
     const categoryMap = new Map(categoryData.map(c => [c.id, c.name]));
 
     // Transform image paths to full URLs for products
-    const productsWithImages = products.map(product => {
+    let productsWithImages = products.map(product => {
       const p = transformProductImages(product, request);
       return {
         ...p,
@@ -179,6 +180,12 @@ const getProducts = async (request, reply) => {
         }
       };
     });
+
+    // Fixed Price customers see their contract prices in the app
+    productsWithImages = await applyCustomerPricesToProducts(
+      productsWithImages,
+      request.user?.id
+    );
 
     return sendSuccess(reply, productsWithImages, 'Products retrieved successfully');
   } catch (error) {
@@ -226,7 +233,12 @@ const getProduct = async (request, reply) => {
     });
 
     // Transform image paths to full URLs for products
-    const productsWithImages = products.map(product => transformProductImages(product, request));
+    let productsWithImages = products.map(product => transformProductImages(product, request));
+
+    productsWithImages = await applyCustomerPricesToProducts(
+      productsWithImages,
+      request.user?.id
+    );
 
     const categoryImage = transformImageUrl(category.image, request);
 
@@ -299,7 +311,7 @@ const getProductsBySubcategory = async (request, reply) => {
     const categoryMap = new Map(categoryData.map(c => [c.id, c.name]));
 
     // Transform image paths to full URLs for products
-    const productsWithImages = products.map(product => {
+    let productsWithImages = products.map(product => {
       const p = transformProductImages(product, request);
       return {
         ...p,
@@ -312,6 +324,11 @@ const getProductsBySubcategory = async (request, reply) => {
         }
       };
     });
+
+    productsWithImages = await applyCustomerPricesToProducts(
+      productsWithImages,
+      request.user?.id
+    );
 
     return sendSuccess(reply, productsWithImages, 'Products retrieved successfully');
   } catch (error) {
@@ -347,12 +364,15 @@ const getProductById = async (request, reply) => {
     });
 
     const p = transformProductImages(product, request);
-    const productData = {
+    let productData = {
       ...p,
       status: p.status === 'inactive' ? 'out_of_stock' : p.status, // Map inactive to out_of_stock for user
       minQuantity: p.stock,
       category: category ? { name: category.name } : null,
     };
+
+    const [priced] = await applyCustomerPricesToProducts([productData], request.user?.id);
+    productData = priced || productData;
 
     return sendSuccess(reply, productData, 'Product retrieved successfully');
   } catch (error) {

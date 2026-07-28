@@ -7,7 +7,7 @@ const { sendSuccess, sendError } = require('../../utils/response');
 const { ORDER_STATUS } = require('../../config/constants');
 const { sendAdminOrderNotification } = require('../../services/notification.service');
 const logger = require('../../utils/logger');
-const { getActiveCustomerPricing } = require('../../controllers/admin/hotel.controller');
+const { getActiveCustomerPricing } = require('../../services/customerPricing.service');
 
 async function buildOrderItems(items, hotelId) {
   const user = await User.findByPk(hotelId);

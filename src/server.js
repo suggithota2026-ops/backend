@@ -3,7 +3,8 @@
 // ===============================
 const fastify = require('fastify')({
   logger: true,
-  bodyLimit: 10 * 1024 * 1024 // 10MB for base64 uploads
+  bodyLimit: 10 * 1024 * 1024, // 10MB for base64 uploads
+  pluginTimeout: 60000, // Swagger UI can take longer on cold start (Windows)
 });
 
 const path = require('path');
@@ -44,7 +45,14 @@ const start = async () => {
     await fastify.register(corsPlugin);
     await fastify.register(authPlugin);
     await fastify.register(multipartPlugin);
-    await fastify.register(swaggerPlugin);
+
+    try {
+      await fastify.register(swaggerPlugin);
+    } catch (swaggerError) {
+      logger.warn('Swagger plugin failed to start; continuing without API docs', {
+        message: swaggerError?.message,
+      });
+    }
 
     // -------------------------------
     // Static File Serving

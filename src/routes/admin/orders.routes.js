@@ -159,6 +159,8 @@ const orderRoutes = async (fastify, options) => {
           date: { type: 'string', format: 'date' },
           startTime: { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
           endTime: { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
+          startDateTime: { type: 'string' },
+          endDateTime: { type: 'string' },
         },
       },
     },

@@ -1,9 +1,8 @@
 // Swagger documentation plugin
-const fp = require('fastify-plugin');
 const fastifySwagger = require('@fastify/swagger');
 const fastifySwaggerUI = require('@fastify/swagger-ui');
 
-async function swaggerPlugin(fastify, options) {
+async function swaggerPlugin(fastify) {
   await fastify.register(fastifySwagger, {
     openapi: {
       info: {
@@ -43,4 +42,5 @@ async function swaggerPlugin(fastify, options) {
   });
 }
 
-module.exports = fp(swaggerPlugin);
+// Do not wrap with fastify-plugin: swagger-ui needs its own encapsulation context
+module.exports = swaggerPlugin;

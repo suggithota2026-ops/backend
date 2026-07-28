@@ -7,7 +7,7 @@ const { sendOrderNotification } = require('../../services/notification.service')
 const { generateInvoice } = require('../../services/invoice.service');
 const { ORDER_STATUS } = require('../../config/constants');
 const logger = require('../../utils/logger');
-const { getStartOfDay, getEndOfDay, applyTimeToDate } = require('../../utils/date');
+const { getStartOfDay, getEndOfDay, applyTimeToDate, formatDate } = require('../../utils/date');
 const { attachHotelsToOrders } = require('../../utils/orderEnrichment');
 
 const getOrders = async (request, reply) => {
@@ -275,22 +275,64 @@ const generateOrderInvoice = async (request, reply) => {
 
 const getTodaysOrdersSummary = async (request, reply) => {
   try {
-    const { date, startTime, endTime } = request.query;
-    const baseDate = date
-      ? (() => {
-        const [year, month, day] = date.split('-').map(Number);
-        return new Date(year, month - 1, day);
-      })()
-      : new Date();
-    const rangeStart = startTime
-      ? applyTimeToDate(baseDate, startTime)
-      : getStartOfDay(baseDate);
-    const rangeEnd = endTime
-      ? applyTimeToDate(baseDate, endTime, true)
-      : getEndOfDay(baseDate);
+    const { date, startTime, endTime, startDateTime, endDateTime } = request.query;
+
+    const parseLocalDateTime = (value, endOfMinute = false) => {
+      const [datePart, timePart = '00:00:00'] = String(value).split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hours, minutes, seconds = 0] = timePart.split(':').map(Number);
+      return new Date(
+        year,
+        month - 1,
+        day,
+        hours || 0,
+        minutes || 0,
+        endOfMinute ? 59 : Number(seconds) || 0,
+        endOfMinute ? 999 : 0
+      );
+    };
+
+    let rangeStart;
+    let rangeEnd;
+    let responseStartDate;
+    let responseEndDate;
+    let responseStartTime;
+    let responseEndTime;
+
+    if (startDateTime && endDateTime) {
+      rangeStart = parseLocalDateTime(startDateTime, false);
+      rangeEnd = parseLocalDateTime(endDateTime, true);
+      responseStartDate = String(startDateTime).split('T')[0];
+      responseEndDate = String(endDateTime).split('T')[0];
+      responseStartTime = (String(startDateTime).split('T')[1] || '00:00:00').slice(0, 5);
+      responseEndTime = (String(endDateTime).split('T')[1] || '23:59:00').slice(0, 5);
+    } else {
+      const baseDate = date
+        ? (() => {
+            const [year, month, day] = date.split('-').map(Number);
+            return new Date(year, month - 1, day);
+          })()
+        : new Date();
+
+      rangeStart = startTime
+        ? applyTimeToDate(baseDate, startTime)
+        : getStartOfDay(baseDate);
+      rangeEnd = endTime
+        ? applyTimeToDate(baseDate, endTime, true)
+        : getEndOfDay(baseDate);
+
+      responseStartDate = date || formatDate(baseDate, 'YYYY-MM-DD');
+      responseEndDate = responseStartDate;
+      responseStartTime = startTime || '00:00';
+      responseEndTime = endTime || '23:59';
+    }
+
+    if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+      return sendError(reply, 'Invalid date-time range', 400);
+    }
 
     if (rangeStart > rangeEnd) {
-      return sendError(reply, 'Start time must be before end time', 400);
+      return sendError(reply, 'Start date-time must be before end date-time', 400);
     }
 
     // Fetch orders within the selected date/time range
@@ -356,12 +398,12 @@ const getTodaysOrdersSummary = async (request, reply) => {
     // Sort by item name
     summaryArray.sort((a, b) => a.itemName.localeCompare(b.itemName));
 
-    const displayDate = date || new Date().toISOString().split('T')[0];
-
     return sendSuccess(reply, {
-      date: displayDate,
-      startTime: startTime || '00:00',
-      endTime: endTime || '23:59',
+      date: responseStartDate,
+      startDate: responseStartDate,
+      endDate: responseEndDate,
+      startTime: responseStartTime,
+      endTime: responseEndTime,
       totalOrders: orders.length,
       summary: summaryArray
     }, 'Orders summary retrieved successfully');

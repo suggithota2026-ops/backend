@@ -3,6 +3,7 @@ const {
   getDailyReport,
   getWeeklyReport,
   getMonthlyReport,
+  getYearlyReport,
   getGSTReport,
 } = require('../../controllers/admin/reports.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
@@ -53,6 +54,21 @@ const reportRoutes = async (fastify, options) => {
     },
     // preHandler: [authenticate, requireAdmin],
   }, getMonthlyReport);
+
+  fastify.get('/reports/yearly', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Get yearly report',
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', format: 'date' },
+        },
+      },
+    },
+    // preHandler: [authenticate, requireAdmin],
+  }, getYearlyReport);
 
   fastify.get('/reports/gst', {
     schema: {

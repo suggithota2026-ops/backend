@@ -39,6 +39,18 @@ const getMonthlyReport = async (request, reply) => {
   }
 };
 
+const getYearlyReport = async (request, reply) => {
+  try {
+    const { date } = request.query;
+    const reportDate = date ? new Date(date) : new Date();
+    const report = await reportService.getYearlyReport(reportDate);
+    return sendSuccess(reply, report, 'Yearly report retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching yearly report:', error);
+    return sendError(reply, 'Failed to fetch yearly report', 500);
+  }
+};
+
 const getGSTReport = async (request, reply) => {
   try {
     const { startDate, endDate } = request.query;
@@ -59,6 +71,7 @@ module.exports = {
   getDailyReport,
   getWeeklyReport,
   getMonthlyReport,
+  getYearlyReport,
   getGSTReport,
 };
 

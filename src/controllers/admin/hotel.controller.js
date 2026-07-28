@@ -6,25 +6,61 @@ const { ROLES, ORDER_STATUS } = require('../../config/constants');
 const { sendSuccess, sendError } = require('../../utils/response');
 const { sendMessage } = require('../../services/otp.service');
 const logger = require('../../utils/logger');
+const {
+  getActiveCustomerPricing,
+  toStartOfDay,
+  toEndOfDay,
+} = require('../../services/customerPricing.service');
 
 const createHotel = async (request, reply) => {
   try {
-    const { mobileNumber, hotelName, address, gstNumber, creditLimit, rateType, pricePerUnit, contractDuration, customerProductPricing } = request.body;
+    const {
+      mobileNumber,
+      hotelName,
+      address,
+      gstNumber,
+      creditLimit,
+      rateType,
+      pricePerUnit,
+      contractDuration,
+      contractStartDate,
+      contractEndDate,
+      customerProductPricing,
+    } = request.body;
 
     // Validate rate type
     if (rateType && !['Dairy Prize', 'Weekly Fixes', 'Fixed Price', 'Daily Price', 'Weekly Price'].includes(rateType)) {
       return sendError(reply, 'Invalid rate type. Must be Dairy Prize, Weekly Fixes, Daily Price, Weekly Price, or Fixed Price', 400);
     }
 
-    // For Fixed Price, validate contract duration
-    if (rateType === 'Fixed Price' && !contractDuration) {
-      return sendError(reply, 'Contract duration is mandatory for Fixed Price rate type', 400);
+    // For Fixed Price, validate contract date range
+    if (rateType === 'Fixed Price') {
+      if (!contractStartDate || !contractEndDate) {
+        return sendError(reply, 'Contract start and end dates are mandatory for Fixed Price rate type', 400);
+      }
+      const start = new Date(contractStartDate);
+      const end = new Date(contractEndDate);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+        return sendError(reply, 'Invalid contract date range', 400);
+      }
     }
 
     // Check if user already exists
     let user = await User.findOne({ where: { mobileNumber } });
     if (user) {
       return sendError(reply, 'Hotel with this mobile number already exists', 400);
+    }
+
+    // Validate Fixed Price payload before creating the user
+    if (rateType === 'Fixed Price') {
+      if (!customerProductPricing || !Array.isArray(customerProductPricing) || customerProductPricing.length === 0) {
+        return sendError(reply, 'At least one product price is required for Fixed Price', 400);
+      }
+      for (const pricing of customerProductPricing) {
+        if (!pricing.productId || !pricing.fixedPrice || pricing.fixedPrice <= 0) {
+          return sendError(reply, 'Invalid product pricing data', 400);
+        }
+      }
     }
 
     // Create user (hotel) directly as verified
@@ -35,64 +71,68 @@ const createHotel = async (request, reply) => {
       gstNumber: gstNumber?.toUpperCase(),
       creditLimit: creditLimit || 0,
       rateType,
-      pricePerUnit: rateType === 'Fixed Price' ? null : pricePerUnit, // Remove pricePerUnit for Fixed Price
+      pricePerUnit: rateType === 'Fixed Price' ? null : pricePerUnit,
       role: ROLES.HOTEL,
-      isVerified: true, // Auto-verify since we are adding manually
+      isVerified: true,
     });
 
     // If rate type is Fixed Price, create customer product pricing records
     if (rateType === 'Fixed Price' && customerProductPricing && Array.isArray(customerProductPricing)) {
-      // Calculate contract dates
-      const startDate = new Date();
-      let endDate = new Date();
-      
-      switch (contractDuration) {
-        case '6 Months':
-          endDate.setMonth(endDate.getMonth() + 6);
-          break;
-        case '1 Year':
-          endDate.setFullYear(endDate.getFullYear() + 1);
-          break;
-        default:
-          // For custom duration, expect specific start/end dates in request
-          if (request.body.contractStartDate && request.body.contractEndDate) {
-            startDate = new Date(request.body.contractStartDate);
-            endDate = new Date(request.body.contractEndDate);
-          } else {
-            return sendError(reply, 'Invalid contract duration', 400);
-          }
-      }
+      let startDate = toStartOfDay(contractStartDate);
+      let endDate = toEndOfDay(contractEndDate);
 
-      // Validate customer product pricing data
-      for (const pricing of customerProductPricing) {
-        if (!pricing.productId || !pricing.fixedPrice || pricing.fixedPrice <= 0) {
-          return sendError(reply, 'Invalid product pricing data', 400);
+      // Legacy fallback for old duration values
+      if ((!contractStartDate || !contractEndDate) && contractDuration) {
+        startDate = toStartOfDay(new Date());
+        endDate = toEndOfDay(new Date());
+        if (contractDuration === '6 Months') {
+          endDate.setUTCMonth(endDate.getUTCMonth() + 6);
+          endDate = toEndOfDay(endDate);
+        } else if (contractDuration === '1 Year') {
+          endDate.setUTCFullYear(endDate.getUTCFullYear() + 1);
+          endDate = toEndOfDay(endDate);
         }
       }
 
-      // Create customer product pricing records
-      for (const pricing of customerProductPricing) {
-        await CustomerProductPricing.create({
-          customerId: user.id,
-          productId: pricing.productId,
-          fixedPrice: pricing.fixedPrice,
-          contractStartDate: startDate,
-          contractEndDate: endDate,
-          isActive: true,
-        });
+      try {
+        for (const pricing of customerProductPricing) {
+          await CustomerProductPricing.create({
+            customerId: user.id,
+            productId: pricing.productId,
+            fixedPrice: pricing.fixedPrice,
+            contractStartDate: startDate,
+            contractEndDate: endDate,
+            isActive: true,
+          });
+        }
+      } catch (pricingError) {
+        logger.error('Error creating customer product pricing:', pricingError);
+        await user.destroy().catch(() => {});
+        return sendError(reply, 'Failed to save customer product pricing', 500);
       }
     }
 
-    // Send Welcome Message
-    await sendMessage(mobileNumber, 'Congratulations , Now you are a member of prk Smiles');
+    // Welcome SMS should never delay or block create response
+    void sendMessage(mobileNumber, 'Congratulations , Now you are a member of prk Smiles').catch(
+      (messageError) => {
+        logger.warn('Welcome message failed after hotel create:', messageError?.message || messageError);
+      }
+    );
 
     return sendSuccess(reply, {
       user: {
         id: user.id,
         mobileNumber: user.mobileNumber,
         hotelName: user.hotelName,
+        address: user.address,
+        gstNumber: user.gstNumber,
+        creditLimit: user.creditLimit,
+        rateType: user.rateType,
+        isBlocked: user.isBlocked,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
       },
-    }, 'Hotel created successfully. Welcome message sent.', 201);
+    }, 'Hotel created successfully', 201);
   } catch (error) {
     logger.error('Error creating hotel:', error);
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -170,7 +210,7 @@ const getHotel = async (request, reply) => {
       where: { 
         customerId: id,
         isActive: true,
-        contractEndDate: { [Op.gte]: new Date() } // Only active contracts
+        contractEndDate: { $gte: new Date() },
       },
       attributes: ['id', 'productId', 'fixedPrice', 'contractStartDate', 'contractEndDate', 'isActive'],
     });
@@ -216,11 +256,15 @@ const updateHotel = async (request, reply) => {
       return sendError(reply, 'Invalid rate type. Must be Dairy Prize, Weekly Fixes, Daily Price, Weekly Price, or Fixed Price', 400);
     }
 
-    // For Fixed Price, validate contract duration
-    if (updateData.rateType === 'Fixed Price' && updateData.contractDuration) {
-      // If changing to Fixed Price, ensure contract duration is provided
-      if (!updateData.contractDuration) {
-        return sendError(reply, 'Contract duration is mandatory for Fixed Price rate type', 400);
+    // For Fixed Price, validate contract date range
+    if (updateData.rateType === 'Fixed Price') {
+      if (!updateData.contractStartDate || !updateData.contractEndDate) {
+        return sendError(reply, 'Contract start and end dates are mandatory for Fixed Price rate type', 400);
+      }
+      const start = new Date(updateData.contractStartDate);
+      const end = new Date(updateData.contractEndDate);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+        return sendError(reply, 'Invalid contract date range', 400);
       }
     }
 
@@ -230,25 +274,19 @@ const updateHotel = async (request, reply) => {
 
     // If rate type is Fixed Price and customer product pricing is provided, update the pricing
     if (updateData.rateType === 'Fixed Price' && updateData.customerProductPricing && Array.isArray(updateData.customerProductPricing)) {
-      // Calculate contract dates
-      const startDate = new Date();
-      let endDate = new Date();
-      
-      switch (updateData.contractDuration) {
-        case '6 Months':
-          endDate.setMonth(endDate.getMonth() + 6);
-          break;
-        case '1 Year':
-          endDate.setFullYear(endDate.getFullYear() + 1);
-          break;
-        default:
-          // For custom duration, expect specific start/end dates in request
-          if (updateData.contractStartDate && updateData.contractEndDate) {
-            startDate = new Date(updateData.contractStartDate);
-            endDate = new Date(updateData.contractEndDate);
-          } else {
-            return sendError(reply, 'Invalid contract duration', 400);
-          }
+      let startDate = toStartOfDay(updateData.contractStartDate);
+      let endDate = toEndOfDay(updateData.contractEndDate);
+
+      if ((!updateData.contractStartDate || !updateData.contractEndDate) && updateData.contractDuration) {
+        startDate = toStartOfDay(new Date());
+        endDate = toEndOfDay(new Date());
+        if (updateData.contractDuration === '6 Months') {
+          endDate.setUTCMonth(endDate.getUTCMonth() + 6);
+          endDate = toEndOfDay(endDate);
+        } else if (updateData.contractDuration === '1 Year') {
+          endDate.setUTCFullYear(endDate.getUTCFullYear() + 1);
+          endDate = toEndOfDay(endDate);
+        }
       }
 
       // Deactivate existing pricing records
@@ -265,16 +303,29 @@ const updateHotel = async (request, reply) => {
         }
       }
 
-      // Create new customer product pricing records
+      // Upsert customer product pricing records (unique on customerId+productId)
       for (const pricing of updateData.customerProductPricing) {
-        await CustomerProductPricing.create({
-          customerId: id,
-          productId: pricing.productId,
-          fixedPrice: pricing.fixedPrice,
-          contractStartDate: startDate,
-          contractEndDate: endDate,
-          isActive: true,
+        const existing = await CustomerProductPricing.findOne({
+          where: { customerId: id, productId: pricing.productId },
         });
+
+        if (existing) {
+          await existing.update({
+            fixedPrice: pricing.fixedPrice,
+            contractStartDate: startDate,
+            contractEndDate: endDate,
+            isActive: true,
+          });
+        } else {
+          await CustomerProductPricing.create({
+            customerId: id,
+            productId: pricing.productId,
+            fixedPrice: pricing.fixedPrice,
+            contractStartDate: startDate,
+            contractEndDate: endDate,
+            isActive: true,
+          });
+        }
       }
 
       // Set pricePerUnit to null for Fixed Price
@@ -361,27 +412,7 @@ const deleteHotel = async (request, reply) => {
   }
 };
 
-// Function to get active customer-specific pricing
-const getActiveCustomerPricing = async (customerId, productId) => {
-  try {
-    const pricing = await CustomerProductPricing.findOne({
-      where: {
-        customerId,
-        productId,
-        isActive: true,
-        contractStartDate: { $lte: new Date() },
-        contractEndDate: { $gte: new Date() },
-      },
-      attributes: ['fixedPrice'],
-    });
-
-    return pricing ? pricing.fixedPrice : null;
-  } catch (error) {
-    logger.error('Error getting active customer pricing:', error);
-    return null;
-  }
-};
-
+// Re-export for backward compatibility
 module.exports = {
   createHotel,
   getHotels,
