@@ -84,7 +84,7 @@ const requireRole = (...allowedRoles) => {
   };
 };
 
-const authorizeAdmin = requireRole('ADMIN', 'super_admin', 'Super Admin');
+const authorizeAdmin = requireRole('ADMIN', 'staff', 'super_admin', 'Super Admin');
 
 const requireSuperAdmin = requireRole('super_admin', 'Super Admin');
 

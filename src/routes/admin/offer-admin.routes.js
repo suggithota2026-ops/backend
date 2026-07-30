@@ -1,13 +1,17 @@
 // Admin-specific offers routes (for the Offers tab in admin panel)
-const { 
-  getAdminOffers, 
+const {
+  getAdminOffers,
   getAdminOfferById,
   createAdminOffer,
-  updateAdminOffer, 
-  deleteAdminOffer 
+  updateAdminOffer,
+  deleteAdminOffer,
 } = require('../../controllers/admin/offer.controller');
-const { authenticate, authorizeAdmin, requireSuperAdmin } = require('../../middlewares/auth.middleware');
-const { sendValidationError } = require('../../utils/response');
+const { authenticate } = require('../../middlewares/auth.middleware');
+const { requirePermission } = require('../../middlewares/admin.middleware');
+const { PERMISSIONS } = require('../../config/permissions');
+
+const canViewOffers = requirePermission(PERMISSIONS.OFFERS_VIEW, PERMISSIONS.OFFERS_MANAGE);
+const canManageOffers = requirePermission(PERMISSIONS.OFFERS_VIEW, PERMISSIONS.OFFERS_MANAGE);
 
 const offerAdminRoutes = async (fastify, options) => {
   // Get all offers for admin panel (with additional analytics)
@@ -28,7 +32,7 @@ const offerAdminRoutes = async (fastify, options) => {
         },
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, canViewOffers],
   }, getAdminOffers);
 
   // Create offer (admin panel)
@@ -57,7 +61,7 @@ const offerAdminRoutes = async (fastify, options) => {
         required: ['code', 'discountType', 'discountValue', 'validUntil'],
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, canManageOffers],
   }, createAdminOffer);
 
   // Get specific offer for admin panel
@@ -74,7 +78,7 @@ const offerAdminRoutes = async (fastify, options) => {
         required: ['id'],
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, canViewOffers],
   }, getAdminOfferById);
 
   // Update offer (admin panel)
@@ -108,7 +112,7 @@ const offerAdminRoutes = async (fastify, options) => {
         required: ['code', 'discountType', 'discountValue'],
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, canManageOffers],
   }, updateAdminOffer);
 
   // Delete offer (admin panel)
@@ -125,7 +129,7 @@ const offerAdminRoutes = async (fastify, options) => {
         required: ['id'],
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, canManageOffers],
   }, deleteAdminOffer);
 };
 

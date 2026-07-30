@@ -7,7 +7,9 @@ const {
   acceptEnquiry,
   rejectEnquiry,
 } = require('../../controllers/contact.controller');
-const { authenticate, authorizeAdmin } = require('../../middlewares/auth.middleware');
+const { authenticate } = require('../../middlewares/auth.middleware');
+const { requirePermission } = require('../../middlewares/admin.middleware');
+const { PERMISSIONS } = require('../../config/permissions');
 
 const adminContactRoutes = async (fastify, options) => {
   // Get all contact messages
@@ -25,7 +27,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, requirePermission(PERMISSIONS.ENQUIRY_VIEW)],
   }, getContactMessages);
 
   // Get single contact message
@@ -41,7 +43,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, requirePermission(PERMISSIONS.ENQUIRY_VIEW)],
   }, getContactMessage);
 
   // Update contact message
@@ -64,7 +66,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, requirePermission(PERMISSIONS.ENQUIRY_VIEW)],
   }, updateContactMessage);
 
   // Delete contact message
@@ -80,7 +82,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, requirePermission(PERMISSIONS.ENQUIRY_VIEW)],
   }, deleteContactMessage);
 
   // Accept enquiry (create hotel account)
@@ -96,7 +98,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, requirePermission(PERMISSIONS.ENQUIRY_VIEW)],
   }, acceptEnquiry);
 
   // Reject enquiry
@@ -118,7 +120,7 @@ const adminContactRoutes = async (fastify, options) => {
         },
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, requirePermission(PERMISSIONS.ENQUIRY_VIEW)],
   }, rejectEnquiry);
 };
 

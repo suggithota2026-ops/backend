@@ -38,7 +38,7 @@ module.exports = {
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '5242880', 10), // 5MB
 
   // Rate limiting
-  // In development, use higher limits; in production, use stricter limits
-  RATE_LIMIT_WINDOW: parseInt(process.env.RATE_LIMIT_WINDOW || (NODE_ENV === 'development' ? '1' : '15'), 10), // minutes
-  RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX || (NODE_ENV === 'development' ? '1000' : '100'), 10), // requests
+  // Admin UI fires many small requests (profile, lists, search). Keep production limits generous.
+  RATE_LIMIT_WINDOW: parseInt(process.env.RATE_LIMIT_WINDOW || (NODE_ENV === 'development' ? '15' : '15'), 10), // minutes
+  RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX || (NODE_ENV === 'development' ? '5000' : '1000'), 10), // requests per window
 };

@@ -26,10 +26,12 @@ const requirePermission = (...requiredPermissions) => {
     }
 
     const role = String(request.user.role || '').toUpperCase();
+    // Full admins bypass permission checks
     if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
       return;
     }
 
+    // Staff / drivers must have the required permission(s)
     const userPermissions = Array.isArray(request.user.permissions)
       ? request.user.permissions
       : [];

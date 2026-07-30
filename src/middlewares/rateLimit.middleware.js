@@ -4,9 +4,25 @@ const { RATE_LIMIT_WINDOW, RATE_LIMIT_MAX, NODE_ENV } = require('../config/env')
 // Simple in-memory rate limiter (use Redis in production)
 const requestCounts = new Map();
 
+const isDev = String(NODE_ENV || '').trim().toLowerCase() === 'development';
+
+// Paths that are polled often by the admin UI — don't burn the global budget
+const SKIP_PATH_PREFIXES = [
+  '/uploads/',
+  '/api-docs',
+  '/favicon',
+];
+
+const SKIP_EXACT_PATHS = new Set([
+  '/health',
+  '/',
+]);
+
+const getPathname = (url = '') => String(url).split('?')[0];
+
 const rateLimit = async (request, reply) => {
   // Skip rate limiting in development mode
-  if (NODE_ENV === 'development') {
+  if (isDev) {
     return;
   }
 
@@ -15,22 +31,31 @@ const rateLimit = async (request, reply) => {
     return;
   }
 
-  // Skip rate limiting for static files and health check
-  const path = request.url;
-  if (path.startsWith('/uploads/') || path === '/health' || path === '/api-docs' || path.startsWith('/api-docs/')) {
+  const path = getPathname(request.url);
+  if (
+    SKIP_EXACT_PATHS.has(path) ||
+    SKIP_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
+  ) {
     return;
   }
 
-  const ip = request.ip;
+  // Prefer authenticated user key so shared NAT IPs don't block the whole office
+  const authHeader = request.headers?.authorization || '';
+  const userKey =
+    typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+      ? `user:${authHeader.slice(0, 32)}`
+      : `ip:${request.ip}`;
+
   const now = Date.now();
-  const windowMs = RATE_LIMIT_WINDOW * 60 * 1000;
+  const windowMs = Math.max(1, Number(RATE_LIMIT_WINDOW) || 15) * 60 * 1000;
+  const maxRequests = Math.max(50, Number(RATE_LIMIT_MAX) || 500);
 
-  if (!requestCounts.has(ip)) {
-    requestCounts.set(ip, { count: 1, resetTime: now + windowMs });
+  if (!requestCounts.has(userKey)) {
+    requestCounts.set(userKey, { count: 1, resetTime: now + windowMs });
     return;
   }
 
-  const record = requestCounts.get(ip);
+  const record = requestCounts.get(userKey);
 
   if (now > record.resetTime) {
     record.count = 1;
@@ -38,9 +63,11 @@ const rateLimit = async (request, reply) => {
     return;
   }
 
-  record.count++;
+  record.count += 1;
 
-  if (record.count > RATE_LIMIT_MAX) {
+  if (record.count > maxRequests) {
+    const retryAfterSec = Math.max(1, Math.ceil((record.resetTime - now) / 1000));
+    reply.header('Retry-After', String(retryAfterSec));
     return reply.status(429).send({
       success: false,
       message: 'Too many requests, please try again later',
@@ -51,11 +78,11 @@ const rateLimit = async (request, reply) => {
 // Cleanup old entries periodically
 setInterval(() => {
   const now = Date.now();
-  for (const [ip, record] of requestCounts.entries()) {
+  for (const [key, record] of requestCounts.entries()) {
     if (now > record.resetTime) {
-      requestCounts.delete(ip);
+      requestCounts.delete(key);
     }
   }
-}, 60000); // Cleanup every minute
+}, 60000);
 
 module.exports = rateLimit;

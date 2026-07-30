@@ -55,6 +55,15 @@ const start = async () => {
     }
 
     // -------------------------------
+    // Response Compression
+    // -------------------------------
+    await fastify.register(require('@fastify/compress'), {
+      global: true,
+      encodings: ['br', 'gzip', 'deflate'],
+      threshold: 1024,
+    });
+
+    // -------------------------------
     // Static File Serving
     // -------------------------------
     const uploadsPath = path.join(__dirname, '../uploads');
@@ -63,7 +72,8 @@ const start = async () => {
       root: uploadsPath,
       prefix: '/uploads/',
       cacheControl: NODE_ENV === 'production',
-      maxAge: NODE_ENV === 'production' ? '1d' : '5m',
+      maxAge: NODE_ENV === 'production' ? '30d' : '5m',
+      immutable: NODE_ENV === 'production',
     });
 
     // -------------------------------

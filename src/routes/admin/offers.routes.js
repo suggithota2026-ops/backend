@@ -1,12 +1,16 @@
 // Admin offers routes
-const { 
-  getAllOffers, 
-  getOfferById, 
-  updateOffer, 
-  deleteOffer 
+const {
+  getAllOffers,
+  getOfferById,
+  updateOffer,
+  deleteOffer,
 } = require('../../controllers/admin/offer.controller');
-const { authenticate, authorizeAdmin } = require('../../middlewares/auth.middleware');
-const { sendValidationError } = require('../../utils/response');
+const { authenticate } = require('../../middlewares/auth.middleware');
+const { requirePermission } = require('../../middlewares/admin.middleware');
+const { PERMISSIONS } = require('../../config/permissions');
+
+const canViewOffers = requirePermission(PERMISSIONS.OFFERS_VIEW, PERMISSIONS.OFFERS_MANAGE);
+const canManageOffers = requirePermission(PERMISSIONS.OFFERS_VIEW, PERMISSIONS.OFFERS_MANAGE);
 
 const offerRoutes = async (fastify, options) => {
   // Get all offers
@@ -25,7 +29,7 @@ const offerRoutes = async (fastify, options) => {
         },
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, canViewOffers],
   }, getAllOffers);
 
   // Get offer by ID
@@ -42,7 +46,7 @@ const offerRoutes = async (fastify, options) => {
         required: ['id'],
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, canViewOffers],
   }, getOfferById);
 
   // Update offer
@@ -75,7 +79,7 @@ const offerRoutes = async (fastify, options) => {
         required: ['code', 'discountType', 'discountValue'],
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, canManageOffers],
   }, updateOffer);
 
   // Delete offer
@@ -92,7 +96,7 @@ const offerRoutes = async (fastify, options) => {
         required: ['id'],
       },
     },
-    preHandler: [authenticate, authorizeAdmin],
+    preHandler: [authenticate, canManageOffers],
   }, deleteOffer);
 };
 
