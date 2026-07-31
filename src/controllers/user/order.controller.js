@@ -46,9 +46,13 @@ async function buildOrderItems(items, hotelId) {
     let unitPrice;
     if (user.rateType === 'Fixed Price') {
       const customerSpecificPrice = await getActiveCustomerPricing(hotelId, productId);
-      unitPrice = customerSpecificPrice
-        ? parseFloat(customerSpecificPrice)
-        : parseFloat(product.price);
+      if (customerSpecificPrice == null || Number.isNaN(Number(customerSpecificPrice))) {
+        return {
+          error: `No active fixed price for ${product.name}. This product is not in the customer's fixed-rate contract.`,
+          statusCode: 400,
+        };
+      }
+      unitPrice = parseFloat(customerSpecificPrice);
     } else {
       unitPrice = parseFloat(product.price);
     }

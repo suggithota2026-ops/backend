@@ -45,7 +45,8 @@ const createHotel = async (request, reply) => {
       }
     }
 
-    // Check if user already exists
+    // Uniqueness is by mobile number only — same hotelName with a different
+    // mobileNumber creates a separate customer account.
     let user = await User.findOne({ where: { mobileNumber } });
     if (user) {
       return sendError(reply, 'Hotel with this mobile number already exists', 400);

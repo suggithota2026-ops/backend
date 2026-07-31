@@ -2,6 +2,7 @@
 const { Op } = require('sequelize');
 const Product = require('../../models/product.model');
 const Category = require('../../models/category.model');
+const User = require('../../models/user.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
 const { applyCustomerPricesToProducts } = require('../../services/customerPricing.service');
@@ -372,7 +373,14 @@ const getProductById = async (request, reply) => {
     };
 
     const [priced] = await applyCustomerPricesToProducts([productData], request.user?.id);
-    productData = priced || productData;
+    if (!priced) {
+      const user = request.user?.id ? await User.findByPk(request.user.id) : null;
+      if (user?.rateType === 'Fixed Price') {
+        return sendError(reply, 'This product is not in your fixed-rate contract', 404);
+      }
+    } else {
+      productData = priced;
+    }
 
     return sendSuccess(reply, productData, 'Product retrieved successfully');
   } catch (error) {
