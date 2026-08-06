@@ -199,18 +199,23 @@ const createProduct = async (request, reply) => {
     const { error: createValidationError, value: validatedProductData } = createProductSchema.validate(productData, {
       abortEarly: false,
       convert: true,
+      stripUnknown: true,
     });
     if (createValidationError) {
+      const detailMessages = createValidationError.details.map((d) => d.message).join('; ');
+      logger.warn(`Product create validation failed: ${detailMessages}`);
       return sendValidationError(reply, createValidationError.details);
     }
 
     Object.assign(productData, validatedProductData);
 
     // Verify category exists - ensure categoryId is a valid integer
-    const categoryId = parseInt(productData.category);
+    const categoryId = parseInt(validatedProductData.category, 10);
     if (isNaN(categoryId)) {
       return sendError(reply, 'Invalid category ID. Must be a number.', 400);
     }
+    // Drop multipart-only fields that are not Product model paths
+    delete productData.category;
 
     const category = await Category.findByPk(categoryId);
     if (!category) {
@@ -248,10 +253,21 @@ const createProduct = async (request, reply) => {
     }
 
     const product = await Product.create({
-      ...productData,
-      categoryId: categoryId, // Use parsed integer
+      name: productData.name,
+      description: productData.description || null,
+      categoryId,
+      subcategory: productData.subcategory ?? null,
+      price: productData.price,
+      pricingType: productData.pricingType || 'fixed',
+      unit: productData.unit || 'kg',
+      stock: productData.stock ?? 0,
+      minStockLevel: productData.minStockLevel ?? 0,
+      status: productData.status,
+      isActive: productData.isActive !== false,
+      isContractOnly: productData.isContractOnly === true,
+      displayOrder: productData.displayOrder || 0,
       images: imagePaths,
-      createdById: parseInt(userId), // Ensure userId is integer
+      createdById: parseInt(userId, 10) || null,
     });
 
     // Get category name for response

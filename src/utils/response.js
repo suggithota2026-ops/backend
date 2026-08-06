@@ -22,8 +22,12 @@ const sendError = (reply, message = 'Error', statusCode = 400, errors = null) =>
 };
 
 const sendValidationError = (reply, errors) => {
-  const firstMessage =
-    Array.isArray(errors) && errors.length > 0 ? errors[0]?.message : null;
+  let firstMessage = null;
+  if (Array.isArray(errors) && errors.length > 0) {
+    firstMessage = errors[0]?.message || errors[0]?.msg || null;
+  } else if (errors && typeof errors === 'object' && errors.message) {
+    firstMessage = errors.message;
+  }
   return sendError(reply, firstMessage || 'Validation failed', 422, errors);
 };
 

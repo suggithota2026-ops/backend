@@ -5,8 +5,8 @@ const { PRODUCT_STATUS } = require('../config/constants');
 const createProductSchema = Joi.object({
   name: Joi.string().trim().min(2).max(100).required(),
   description: Joi.string().trim().max(1000).optional().allow(''),
-  category: Joi.string().required(),
-  subcategory: Joi.string().trim().optional().allow(''),
+  category: Joi.alternatives().try(Joi.string().trim(), Joi.number()).required(),
+  subcategory: Joi.string().trim().optional().allow('', null),
   price: Joi.number().min(0).required(),
   pricingType: Joi.string().valid('fixed', 'daily', 'weekly').default('fixed'),
   unit: Joi.string().trim().default('kg'),
@@ -18,13 +18,13 @@ const createProductSchema = Joi.object({
   isActive: Joi.boolean().default(true),
   isContractOnly: Joi.boolean().default(false),
   displayOrder: Joi.number().default(0),
-});
+}).unknown(true);
 
 const updateProductSchema = Joi.object({
   name: Joi.string().trim().min(2).max(100).optional(),
   description: Joi.string().trim().max(1000).optional().allow(''),
-  category: Joi.string().optional(),
-  subcategory: Joi.string().trim().optional().allow(''),
+  category: Joi.alternatives().try(Joi.string().trim(), Joi.number()).optional(),
+  subcategory: Joi.string().trim().optional().allow('', null),
   price: Joi.number().min(0).optional(),
   pricingType: Joi.string().valid('fixed', 'daily', 'weekly').optional(),
   unit: Joi.string().trim().optional(),
@@ -36,7 +36,7 @@ const updateProductSchema = Joi.object({
   isActive: Joi.boolean().optional(),
   isContractOnly: Joi.boolean().optional(),
   displayOrder: Joi.number().optional(),
-});
+}).unknown(true);
 
 const updateStockSchema = Joi.object({
   stock: Joi.number().min(0).required(),

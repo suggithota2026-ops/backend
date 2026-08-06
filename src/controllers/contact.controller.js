@@ -4,7 +4,7 @@ const User = require('../models/user.model');
 const { sendSuccess, sendError } = require('../utils/response');
 const logger = require('../utils/logger');
 const { createNotification } = require('../services/notification.service');
-const { NOTIFICATION_TYPES } = require('../config/constants');
+const { NOTIFICATION_TYPES, ROLES } = require('../config/constants');
 const { sendOTP } = require('../services/otp.service');
 const {
   normalizeMobileNumber,
@@ -48,24 +48,48 @@ async function provisionCustomerFromEnquiry(message) {
   let hotel = await User.findOne({ where: userMobileWhere(normalizedContact) });
   let created = false;
 
+  const safeNumber = (value) => {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+
   if (!hotel) {
     const fullAddress = buildEnquiryAddress(message);
-    hotel = await User.create({
-      mobileNumber: normalizedContact,
-      hotelName: message.hotelName,
-      address: fullAddress,
-      city: message.city,
-      pinCode: message.pinCode,
-      latitude: message.latitude ?? null,
-      longitude: message.longitude ?? null,
-      isVerified: true,
-      role: 'hotel',
-      creditLimit: 0,
-      isBlocked: false,
-      rateType: 'Daily Price',
-      pricePerUnit: null,
-    });
-    created = true;
+    const hotelName =
+      (message.hotelName && String(message.hotelName).trim()) ||
+      `Customer ${normalizedContact}`;
+
+    try {
+      hotel = await User.create({
+        mobileNumber: normalizedContact,
+        hotelName,
+        address: fullAddress || message.address || null,
+        city: message.city || null,
+        pinCode: message.pinCode || null,
+        latitude: safeNumber(message.latitude),
+        longitude: safeNumber(message.longitude),
+        isVerified: true,
+        role: ROLES.HOTEL,
+        creditLimit: 0,
+        isBlocked: false,
+        rateType: 'Daily Price',
+        pricePerUnit: null,
+      });
+      created = true;
+    } catch (createError) {
+      // Race / duplicate mobile — link existing customer instead of failing resolve
+      const existing = await User.findOne({ where: userMobileWhere(normalizedContact) });
+      if (existing) {
+        hotel = existing;
+        created = false;
+      } else {
+        logger.error('provisionCustomerFromEnquiry create failed:', createError);
+        throw new Error(
+          createError?.message || 'Failed to create customer account from enquiry'
+        );
+      }
+    }
   } else if (hotel.mobileNumber !== normalizedContact) {
     hotel.mobileNumber = normalizedContact;
     await hotel.save();
@@ -253,7 +277,7 @@ const updateContactMessage = async (request, reply) => {
     }
 
     const updateData = {};
-    if (status) updateData.status = status;
+    if (status && status !== 'resolved') updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
     if (hotelName !== undefined) updateData.hotelName = String(hotelName).trim();
     if (address !== undefined) updateData.address = address ? String(address).trim() : null;
@@ -271,19 +295,35 @@ const updateContactMessage = async (request, reply) => {
       updateData.contactNumber = normalized;
     }
 
-    await contactMessage.update(updateData);
-    await contactMessage.reload();
+    // Apply field updates first (without resolving yet)
+    if (Object.keys(updateData).length > 0) {
+      await contactMessage.update(updateData);
+      await contactMessage.reload();
+    }
 
     let hotel = null;
     if (status === 'resolved') {
-      const provisioned = await provisionCustomerFromEnquiry(contactMessage);
-      hotel = provisioned.hotel;
-      const note = provisioned.created
-        ? `Customer account created (ID: ${hotel.id}) on ${new Date().toISOString()}.`
-        : `Linked to existing customer (ID: ${hotel.id}) on ${new Date().toISOString()}.`;
-      await contactMessage.update({
-        notes: contactMessage.notes ? `${contactMessage.notes}\n${note}` : note,
-      });
+      // Create/link customer BEFORE marking enquiry resolved (avoids resolved-without-customer on live)
+      try {
+        const provisioned = await provisionCustomerFromEnquiry(contactMessage);
+        hotel = provisioned.hotel;
+        const note = provisioned.created
+          ? `Customer account created (ID: ${hotel.id}) on ${new Date().toISOString()}.`
+          : `Linked to existing customer (ID: ${hotel.id}) on ${new Date().toISOString()}.`;
+        await contactMessage.update({
+          status: 'resolved',
+          notes: contactMessage.notes ? `${contactMessage.notes}\n${note}` : note,
+        });
+        await contactMessage.reload();
+      } catch (provisionError) {
+        logger.error('Failed to provision customer from enquiry:', provisionError);
+        return sendError(
+          reply,
+          provisionError.message ||
+            'Enquiry could not be resolved because customer account creation failed. Please check mobile number and try again.',
+          500
+        );
+      }
     } else if (
       hotelName !== undefined ||
       address !== undefined ||
