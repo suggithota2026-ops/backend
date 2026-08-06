@@ -12,6 +12,7 @@ const ProductSchema = new mongoose.Schema(
     images: { type: [String], default: [] },
     price: { type: Number, required: true },
     pricingType: { type: String, enum: ['fixed', 'daily', 'weekly'], default: 'fixed' },
+    isContractOnly: { type: Boolean, default: false },
     unit: { type: String, default: 'kg' },
     stock: { type: Number, default: 0 },
     minStockLevel: { type: Number, default: 0 },

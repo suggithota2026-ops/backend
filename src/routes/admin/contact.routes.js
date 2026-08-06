@@ -9,6 +9,8 @@ const {
 } = require('../../controllers/contact.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { requirePermission } = require('../../middlewares/admin.middleware');
+const { sendValidationError } = require('../../utils/response');
+const { updateContactMessageSchema } = require('../../validations/contact.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 
 const adminContactRoutes = async (fastify, options) => {
@@ -60,11 +62,26 @@ const adminContactRoutes = async (fastify, options) => {
       },
       body: {
         type: 'object',
+        additionalProperties: true,
         properties: {
           status: { type: 'string', enum: ['pending', 'contacted', 'resolved'] },
           notes: { type: 'string' },
+          hotelName: { type: 'string' },
+          contactNumber: { type: 'string' },
+          address: { type: 'string' },
+          city: { type: 'string' },
+          pinCode: { type: 'string' },
+          landmark: { type: 'string' },
+          email: { type: 'string' },
+          message: { type: 'string' },
         },
       },
+    },
+    preValidation: async (request, reply) => {
+      const { error } = updateContactMessageSchema.validate(request.body || {}, { allowUnknown: true });
+      if (error) {
+        return sendValidationError(reply, error.details);
+      }
     },
     preHandler: [authenticate, requirePermission(PERMISSIONS.ENQUIRY_VIEW)],
   }, updateContactMessage);

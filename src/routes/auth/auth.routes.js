@@ -1,11 +1,12 @@
 // OTP login APIs
-const { sendOTP, verifyOTP, resendOTP, setupProfile, updateFCMToken } = require('../../controllers/auth.controller');
+const { sendOTP, verifyOTP, resendOTP, setupProfile, updateLocation, updateFCMToken } = require('../../controllers/auth.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 const { sendValidationError } = require('../../utils/response');
 const {
   sendOTPSchema,
   verifyOTPSchema,
   setupProfileSchema,
+  updateLocationSchema,
   updateFCMTokenSchema,
 } = require('../../validations/auth.validation');
 
@@ -140,6 +141,10 @@ const authRoutes = async (fastify, options) => {
           hotelName: { type: 'string' },
           name: { type: 'string' },
           address: { type: 'string' },
+          city: { type: 'string' },
+          pinCode: { type: 'string' },
+          latitude: { type: 'number' },
+          longitude: { type: 'number' },
           gstNumber: { type: 'string' },
           fcmToken: { type: 'string' },
         },
@@ -153,6 +158,33 @@ const authRoutes = async (fastify, options) => {
       }
     },
   }, setupProfile);
+
+  // Capture / refresh GPS location after login
+  fastify.post('/update-location', {
+    schema: {
+      tags: ['auth'],
+      summary: 'Update user location and address from device GPS',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        additionalProperties: true,
+        properties: {
+          address: { type: 'string' },
+          city: { type: 'string' },
+          pinCode: { type: 'string' },
+          latitude: { type: 'number' },
+          longitude: { type: 'number' },
+        },
+      },
+    },
+    preHandler: [authenticate],
+    preValidation: async (request, reply) => {
+      const { error } = updateLocationSchema.validate(request.body || {}, { allowUnknown: true });
+      if (error) {
+        return sendValidationError(reply, error.details);
+      }
+    },
+  }, updateLocation);
 
   // Update FCM Token
   fastify.post('/fcm-token', {

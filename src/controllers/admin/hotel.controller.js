@@ -1,11 +1,17 @@
 // Admin hotel controller
 const User = require('../../models/user.model');
 const Order = require('../../models/order.model');
+const Product = require('../../models/product.model');
 const CustomerProductPricing = require('../../models/customer.product.pricing.model');
+const { Op } = require('sequelize');
 const { ROLES, ORDER_STATUS } = require('../../config/constants');
 const { sendSuccess, sendError } = require('../../utils/response');
 const { sendMessage } = require('../../services/otp.service');
 const logger = require('../../utils/logger');
+const {
+  normalizeMobileNumber,
+  userMobileWhere,
+} = require('../../utils/userMobile');
 const {
   getActiveCustomerPricing,
   toStartOfDay,
@@ -15,7 +21,7 @@ const {
 const createHotel = async (request, reply) => {
   try {
     const {
-      mobileNumber,
+      mobileNumber: rawMobile,
       hotelName,
       address,
       gstNumber,
@@ -27,6 +33,11 @@ const createHotel = async (request, reply) => {
       contractEndDate,
       customerProductPricing,
     } = request.body;
+
+    const mobileNumber = String(rawMobile || '').replace(/\D/g, '').slice(-10);
+    if (mobileNumber.length !== 10) {
+      return sendError(reply, 'Mobile number must be 10 digits', 400);
+    }
 
     // Validate rate type
     if (rateType && !['Dairy Prize', 'Weekly Fixes', 'Fixed Price', 'Daily Price', 'Weekly Price'].includes(rateType)) {
@@ -47,7 +58,7 @@ const createHotel = async (request, reply) => {
 
     // Uniqueness is by mobile number only — same hotelName with a different
     // mobileNumber creates a separate customer account.
-    let user = await User.findOne({ where: { mobileNumber } });
+    let user = await User.findOne({ where: userMobileWhere(mobileNumber) });
     if (user) {
       return sendError(reply, 'Hotel with this mobile number already exists', 400);
     }
@@ -157,8 +168,14 @@ const getHotels = async (request, reply) => {
       where.isBlocked = isBlocked === 'true';
     }
     if (search) {
-      const re = new RegExp(String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      where.$or = [{ hotelName: re }, { mobileNumber: re }];
+      const term = String(search).trim();
+      const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      where.$or = [
+        { hotelName: re },
+        { mobileNumber: re },
+        { address: re },
+        { city: re },
+      ];
     }
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -206,15 +223,27 @@ const getHotel = async (request, reply) => {
       return sendError(reply, 'Hotel not found', 404);
     }
 
-    // Get customer product pricing if it exists
+    // Get all active customer product pricing (admin edit needs full list)
     const customerProductPricing = await CustomerProductPricing.findAll({
       where: { 
-        customerId: id,
+        customerId: Number(id),
         isActive: true,
-        contractEndDate: { $gte: new Date() },
       },
       attributes: ['id', 'productId', 'fixedPrice', 'contractStartDate', 'contractEndDate', 'isActive'],
     });
+
+    const pricingJson = customerProductPricing.map((pricing) => pricing.toJSON());
+    const productIds = [
+      ...new Set(pricingJson.map((p) => Number(p.productId)).filter((pid) => !Number.isNaN(pid))),
+    ];
+    let productNameById = new Map();
+    if (productIds.length > 0) {
+      const products = await Product.findAll({
+        where: { id: { [Op.in]: productIds } },
+        attributes: ['id', 'name'],
+      });
+      productNameById = new Map(products.map((p) => [Number(p.id), p.name]));
+    }
 
     const orderStats = await Order.aggregate([
       { $match: { hotelId: Number(id) } },
@@ -228,7 +257,10 @@ const getHotel = async (request, reply) => {
     return sendSuccess(reply, {
       hotel: {
         ...hotel.toJSON(),
-        customerProductPricing: customerProductPricing.map(pricing => pricing.toJSON())
+        customerProductPricing: pricingJson.map((pricing) => ({
+          ...pricing,
+          productName: productNameById.get(Number(pricing.productId)) || null,
+        })),
       },
       orderStats: orderStats.map(stat => ({
         _id: stat._id,
@@ -244,70 +276,84 @@ const getHotel = async (request, reply) => {
 
 const updateHotel = async (request, reply) => {
   try {
-    const { id } = request.params;
-    const updateData = request.body;
+    const hotelId = Number(request.params.id);
+    if (!Number.isFinite(hotelId) || hotelId <= 0) {
+      return sendError(reply, 'Invalid hotel ID', 400);
+    }
 
-    const hotel = await User.findByPk(id);
+    const body = request.body || {};
+    const hotel = await User.findByPk(hotelId);
     if (!hotel || hotel.role !== ROLES.HOTEL) {
       return sendError(reply, 'Hotel not found', 404);
     }
 
+    const nextRateType =
+      body.rateType !== undefined && body.rateType !== null && body.rateType !== ''
+        ? String(body.rateType).trim()
+        : hotel.rateType;
+
     // Validate rate type
-    if (updateData.rateType && !['Dairy Prize', 'Weekly Fixes', 'Fixed Price', 'Daily Price', 'Weekly Price'].includes(updateData.rateType)) {
+    if (
+      body.rateType &&
+      !['Dairy Prize', 'Weekly Fixes', 'Fixed Price', 'Daily Price', 'Weekly Price'].includes(nextRateType)
+    ) {
       return sendError(reply, 'Invalid rate type. Must be Dairy Prize, Weekly Fixes, Daily Price, Weekly Price, or Fixed Price', 400);
     }
 
     // For Fixed Price, validate contract date range
-    if (updateData.rateType === 'Fixed Price') {
-      if (!updateData.contractStartDate || !updateData.contractEndDate) {
+    if (nextRateType === 'Fixed Price') {
+      if (!body.contractStartDate || !body.contractEndDate) {
         return sendError(reply, 'Contract start and end dates are mandatory for Fixed Price rate type', 400);
       }
-      const start = new Date(updateData.contractStartDate);
-      const end = new Date(updateData.contractEndDate);
+      const start = new Date(body.contractStartDate);
+      const end = new Date(body.contractEndDate);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
         return sendError(reply, 'Invalid contract date range', 400);
       }
     }
 
-    if (updateData.gstNumber) {
-      updateData.gstNumber = updateData.gstNumber.toUpperCase();
+    // Only persist User model fields (never write pricing/contract payload onto the user doc)
+    const userUpdate = {};
+    if (body.hotelName !== undefined) userUpdate.hotelName = body.hotelName;
+    if (body.address !== undefined) userUpdate.address = body.address;
+    if (body.gstNumber !== undefined) {
+      userUpdate.gstNumber = body.gstNumber ? String(body.gstNumber).toUpperCase() : null;
     }
+    if (body.creditLimit !== undefined) userUpdate.creditLimit = Number(body.creditLimit) || 0;
+    if (body.isBlocked !== undefined) userUpdate.isBlocked = body.isBlocked === true;
+    if (body.rateType !== undefined) userUpdate.rateType = nextRateType;
 
-    // If rate type is Fixed Price and customer product pricing is provided, update the pricing
-    if (updateData.rateType === 'Fixed Price' && updateData.customerProductPricing && Array.isArray(updateData.customerProductPricing)) {
-      let startDate = toStartOfDay(updateData.contractStartDate);
-      let endDate = toEndOfDay(updateData.contractEndDate);
+    if (nextRateType === 'Fixed Price' && Array.isArray(body.customerProductPricing)) {
+      let startDate = toStartOfDay(body.contractStartDate);
+      let endDate = toEndOfDay(body.contractEndDate);
 
-      if ((!updateData.contractStartDate || !updateData.contractEndDate) && updateData.contractDuration) {
+      if ((!body.contractStartDate || !body.contractEndDate) && body.contractDuration) {
         startDate = toStartOfDay(new Date());
         endDate = toEndOfDay(new Date());
-        if (updateData.contractDuration === '6 Months') {
+        if (body.contractDuration === '6 Months') {
           endDate.setUTCMonth(endDate.getUTCMonth() + 6);
           endDate = toEndOfDay(endDate);
-        } else if (updateData.contractDuration === '1 Year') {
+        } else if (body.contractDuration === '1 Year') {
           endDate.setUTCFullYear(endDate.getUTCFullYear() + 1);
           endDate = toEndOfDay(endDate);
         }
       }
 
-      // Deactivate existing pricing records
-      await CustomerProductPricing.update({
-        isActive: false
-      }, {
-        where: { customerId: id }
-      });
+      await CustomerProductPricing.update(
+        { isActive: false },
+        { where: { customerId: hotelId } }
+      );
 
-      // Validate customer product pricing data
-      for (const pricing of updateData.customerProductPricing) {
+      for (const pricing of body.customerProductPricing) {
         if (!pricing.productId || !pricing.fixedPrice || pricing.fixedPrice <= 0) {
           return sendError(reply, 'Invalid product pricing data', 400);
         }
       }
 
-      // Upsert customer product pricing records (unique on customerId+productId)
-      for (const pricing of updateData.customerProductPricing) {
+      for (const pricing of body.customerProductPricing) {
+        const productId = Number(pricing.productId);
         const existing = await CustomerProductPricing.findOne({
-          where: { customerId: id, productId: pricing.productId },
+          where: { customerId: hotelId, productId },
         });
 
         if (existing) {
@@ -319,8 +365,8 @@ const updateHotel = async (request, reply) => {
           });
         } else {
           await CustomerProductPricing.create({
-            customerId: id,
-            productId: pricing.productId,
+            customerId: hotelId,
+            productId,
             fixedPrice: pricing.fixedPrice,
             contractStartDate: startDate,
             contractEndDate: endDate,
@@ -329,24 +375,41 @@ const updateHotel = async (request, reply) => {
         }
       }
 
-      // Set pricePerUnit to null for Fixed Price
-      updateData.pricePerUnit = null;
-    } else if (updateData.rateType && updateData.rateType !== 'Fixed Price') {
-      // For non-fixed pricing types, remove customer product pricing
-      await CustomerProductPricing.update({
-        isActive: false
-      }, {
-        where: { customerId: id }
-      });
+      userUpdate.pricePerUnit = null;
+    } else if (nextRateType && nextRateType !== 'Fixed Price') {
+      // Leaving Fixed Price → deactivate contract pricing so Daily/Weekly use catalog only
+      await CustomerProductPricing.update(
+        { isActive: false },
+        { where: { customerId: hotelId } }
+      );
+      userUpdate.pricePerUnit = body.pricePerUnit != null ? Number(body.pricePerUnit) : hotel.pricePerUnit;
     }
 
-    // Sequelize update
-    await hotel.update(updateData);
+    await hotel.update(userUpdate);
+    await hotel.reload();
 
-    return sendSuccess(reply, hotel, 'Hotel updated successfully');
+    logger.info(
+      `Hotel ${hotelId} updated: rateType=${hotel.rateType}`
+    );
+
+    return sendSuccess(
+      reply,
+      {
+        id: hotel.id,
+        hotelName: hotel.hotelName,
+        mobileNumber: hotel.mobileNumber,
+        address: hotel.address,
+        gstNumber: hotel.gstNumber,
+        creditLimit: hotel.creditLimit,
+        rateType: hotel.rateType,
+        isBlocked: hotel.isBlocked,
+        updatedAt: hotel.updatedAt,
+      },
+      'Hotel updated successfully'
+    );
   } catch (error) {
     logger.error('Error updating hotel:', error);
-    return sendError(reply, 'Failed to update hotel', 500);
+    return sendError(reply, error.message || 'Failed to update hotel', 500);
   }
 };
 

@@ -16,6 +16,10 @@ const UserSchema = new mongoose.Schema(
     // Business details
     hotelName: { type: String, default: null },
     address: { type: String, default: null },
+    city: { type: String, default: null },
+    pinCode: { type: String, default: null },
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
     gstNumber: { type: String, default: null },
     creditLimit: { type: Number, default: 0 },
     isBlocked: { type: Boolean, default: false },

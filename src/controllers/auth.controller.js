@@ -5,38 +5,49 @@ const { generateOTPWithExpiry, verifyOTP: verifyOTPService, sendOTP: sendOTPServ
 const { sendSuccess, sendError } = require('../utils/response');
 const logger = require('../utils/logger');
 const { NODE_ENV, OTP_EXPIRY_MINUTES } = require('../config/env');
+const {
+  normalizeMobileNumber,
+  userMobileWhere,
+  contactNumberWhere,
+} = require('../utils/userMobile');
 
 // POST /api/auth/send-otp
 const sendOTP = async (request, reply) => {
   try {
-    const { mobileNumber } = request.body;
+    const mobileNumber = normalizeMobileNumber(request.body.mobileNumber);
+    if (mobileNumber.length !== 10) {
+      return sendError(reply, 'Please enter a valid 10-digit mobile number', 400);
+    }
 
-    // Find user by mobile using Sequelize
-    let user = await User.findOne({ where: { mobileNumber } });
+    let user = await User.findOne({ where: userMobileWhere(mobileNumber) });
 
-    // If user doesn't exist, they need to submit enquiry first
+    // If user doesn't exist, they need to register and get admin approval first
     if (!user) {
-      // Check if there is a pending enquiry for this number
       const pendingEnquiry = await ContactMessage.findOne({
         where: {
-          contactNumber: mobileNumber,
-          status: 'pending'
-        }
+          ...contactNumberWhere(mobileNumber),
+          status: 'pending',
+        },
       });
 
       if (pendingEnquiry) {
         return sendError(
           reply,
-          'Your registration request is pending admin approval. Please wait for confirmation.',
-          403 // Forbidden/Pending
+          'Your registration is pending admin approval. Please wait — you can login after approval.',
+          403
         );
       }
 
       return sendError(
         reply,
-        'No account found with this number. Please submit an enquiry through our website first.',
+        'No account found for this number. Please register in the app first, then login after admin approves.',
         404
       );
+    }
+
+    if (user.mobileNumber !== mobileNumber) {
+      user.mobileNumber = mobileNumber;
+      await user.save();
     }
 
     // Check if hotel is blocked
@@ -124,9 +135,13 @@ const sendOTP = async (request, reply) => {
 // POST /api/auth/verify-otp
 const verifyOTP = async (request, reply) => {
   try {
-    const { mobileNumber, otp } = request.body;
+    const { otp } = request.body;
+    const mobileNumber = normalizeMobileNumber(request.body.mobileNumber);
+    if (mobileNumber.length !== 10) {
+      return sendError(reply, 'Please enter a valid 10-digit mobile number', 400);
+    }
 
-    const user = await User.findOne({ where: { mobileNumber } });
+    const user = await User.findOne({ where: userMobileWhere(mobileNumber) });
     if (!user) {
       return sendError(reply, 'User not found', 404);
     }
@@ -175,6 +190,12 @@ const verifyOTP = async (request, reply) => {
         id: user.id,
         mobileNumber: user.mobileNumber,
         role: user.role,
+        hotelName: user.hotelName,
+        address: user.address,
+        city: user.city,
+        pinCode: user.pinCode,
+        latitude: user.latitude,
+        longitude: user.longitude,
         isProfileComplete: !!(user.hotelName && user.address),
       },
     }, 'OTP verified successfully');
@@ -184,13 +205,94 @@ const verifyOTP = async (request, reply) => {
   }
 };
 
+const applyLocationFields = (updateData, body, { fillAddressIfEmpty = false, currentAddress = null } = {}) => {
+  const address = body.address ?? body.hotelAddress ?? body.hotel_address;
+  const city = body.city;
+  const pinCode = body.pinCode ?? body.pincode ?? body.postalCode;
+  const latitude = body.latitude ?? body.lat;
+  const longitude = body.longitude ?? body.lng ?? body.lon;
+
+  if (address !== undefined && address !== null && String(address).trim()) {
+    if (!fillAddressIfEmpty || !currentAddress) {
+      updateData.address = String(address).trim();
+    }
+  }
+  if (city !== undefined && city !== null && String(city).trim()) {
+    updateData.city = String(city).trim();
+  }
+  if (pinCode !== undefined && pinCode !== null && String(pinCode).trim()) {
+    updateData.pinCode = String(pinCode).trim();
+  }
+  if (latitude !== undefined && latitude !== null && latitude !== '') {
+    const lat = Number(latitude);
+    if (!Number.isNaN(lat)) updateData.latitude = lat;
+  }
+  if (longitude !== undefined && longitude !== null && longitude !== '') {
+    const lng = Number(longitude);
+    if (!Number.isNaN(lng)) updateData.longitude = lng;
+  }
+};
+
+// POST /api/auth/update-location — capture GPS address after login/register
+const updateLocation = async (request, reply) => {
+  try {
+    const userId = Number(request.user.id);
+    const body = request.body || {};
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return sendError(reply, 'User not found', 404);
+    }
+
+    const updateData = {};
+    applyLocationFields(updateData, body, {
+      fillAddressIfEmpty: true,
+      currentAddress: user.address,
+    });
+
+    // Always fill empty address from captured location
+    const incomingAddress = body.address ?? body.hotelAddress ?? body.hotel_address;
+    if ((!user.address || !String(user.address).trim()) && incomingAddress && String(incomingAddress).trim()) {
+      updateData.address = String(incomingAddress).trim();
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return sendError(reply, 'No location fields provided', 400);
+    }
+
+    const updated = await User.findOneAndUpdate(
+      { id: userId },
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select('-otpCode -otpExpiresAt');
+
+    return sendSuccess(reply, {
+      user: {
+        id: updated.id,
+        mobileNumber: updated.mobileNumber,
+        hotelName: updated.hotelName,
+        address: updated.address,
+        city: updated.city,
+        pinCode: updated.pinCode,
+        latitude: updated.latitude,
+        longitude: updated.longitude,
+      },
+    }, 'Location updated successfully');
+  } catch (error) {
+    logger.error('Error updating location:', error);
+    return sendError(reply, 'Failed to update location', 500);
+  }
+};
+
 // POST /api/auth/resend-otp
 const resendOTP = async (request, reply) => {
   try {
-    const { mobileNumber } = request.body;
+    const mobileNumber = normalizeMobileNumber(request.body.mobileNumber);
+    if (mobileNumber.length !== 10) {
+      return sendError(reply, 'Please enter a valid 10-digit mobile number', 400);
+    }
 
-    // Find user by mobile
-    const user = await User.findOne({ where: { mobileNumber } });
+    const user = await User.findOne({ where: userMobileWhere(mobileNumber) });
     if (!user) {
       return sendError(reply, 'User not found. Please register first.', 404);
     }
@@ -254,6 +356,8 @@ const setupProfile = async (request, reply) => {
       address: String(address).trim(),
     };
 
+    applyLocationFields(updateData, body);
+
     if (gstNumber !== undefined) {
       const gst = String(gstNumber).trim().toUpperCase();
       if (
@@ -285,6 +389,10 @@ const setupProfile = async (request, reply) => {
         mobileNumber: updated.mobileNumber,
         hotelName: updated.hotelName,
         address: updated.address,
+        city: updated.city,
+        pinCode: updated.pinCode,
+        latitude: updated.latitude,
+        longitude: updated.longitude,
         gstNumber: updated.gstNumber,
       },
     }, 'Profile updated successfully');
@@ -320,5 +428,6 @@ module.exports = {
   verifyOTP,
   resendOTP,
   setupProfile,
+  updateLocation,
   updateFCMToken,
 };

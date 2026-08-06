@@ -5,6 +5,7 @@ const {
   getProduct,
   getProductById,
   getProductsBySubcategory,
+  getFeaturedProducts,
 } = require('../../controllers/user/product.controller');
 const { authenticate } = require('../../middlewares/auth.middleware');
 
@@ -35,20 +36,21 @@ const productRoutes = async (fastify, options) => {
     preHandler: [authenticate],
   }, getProducts);
 
-  fastify.get('/products/:id', {
+  // Must be registered before /products/:id so "featured" is not treated as a category id
+  fastify.get('/products/featured', {
     schema: {
       tags: ['user'],
-      summary: 'Get products by category ID',
+      summary: 'Get featured products for home (rate-type filtered)',
       security: [{ bearerAuth: [] }],
-      params: {
+      querystring: {
         type: 'object',
         properties: {
-          id: { type: 'string' },
+          limit: { type: 'integer' },
         },
       },
     },
     preHandler: [authenticate],
-  }, getProduct);
+  }, getFeaturedProducts);
 
   fastify.get('/products/subcategory/:subcategoryId', {
     schema: {
@@ -79,6 +81,21 @@ const productRoutes = async (fastify, options) => {
     },
     preHandler: [authenticate],
   }, getProductById);
+
+  fastify.get('/products/:id', {
+    schema: {
+      tags: ['user'],
+      summary: 'Get products by category ID',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+    },
+    preHandler: [authenticate],
+  }, getProduct);
 };
 
 module.exports = productRoutes;

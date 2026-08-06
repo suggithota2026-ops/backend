@@ -24,6 +24,7 @@ const { connectDB } = require('./config/db');
 const logger = require('./utils/logger');
 const { seedDefaultAdmin } = require('./utils/seedDefaultAdmin');
 const { syncCounters } = require('./utils/syncCounters');
+const { backfillContractOnlyProducts } = require('./utils/backfillContractOnlyProducts');
 
 
 // ===============================
@@ -38,6 +39,7 @@ const start = async () => {
     await connectDB();
     await syncCounters();
     await seedDefaultAdmin();
+    await backfillContractOnlyProducts();
 
     // -------------------------------
     // Register Plugins

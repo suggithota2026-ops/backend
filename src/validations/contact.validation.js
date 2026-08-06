@@ -8,66 +8,51 @@ const sendMessageSchema = Joi.object({
     .max(100)
     .required()
     .messages({
-      'string.empty': 'Hotel name is required',
-      'string.min': 'Hotel name must be at least 2 characters',
-      'string.max': 'Hotel name must not exceed 100 characters',
+      'string.empty': 'Please enter your name or business name',
+      'string.min': 'Name must be at least 2 characters',
+      'any.required': 'Please enter your name or business name',
     }),
   contactNumber: Joi.string()
     .trim()
-    .pattern(/^[0-9]{10}$/)
     .required()
     .messages({
-      'string.pattern.base': 'Contact number must be a valid 10-digit number',
-      'any.required': 'Contact number is required',
+      'any.required': 'Please enter your mobile number',
     }),
   address: Joi.string()
     .trim()
+    .min(3)
     .max(500)
     .required()
     .messages({
-      'string.empty': 'Address is required',
-      'string.max': 'Address must not exceed 500 characters',
+      'string.empty': 'Please enter your address',
+      'string.min': 'Please enter your address',
+      'any.required': 'Please enter your address',
     }),
-  city: Joi.string()
-    .trim()
-    .min(2)
-    .max(100)
-    .required()
-    .messages({
-      'string.empty': 'City is required',
-      'string.min': 'City must be at least 2 characters',
-    }),
-  pinCode: Joi.string()
-    .trim()
-    .pattern(/^[0-9]{6}$/)
-    .required()
-    .messages({
-      'string.pattern.base': 'PIN code must be a valid 6-digit number',
-      'any.required': 'PIN code is required',
-    }),
-  landmark: Joi.string()
-    .trim()
-    .max(200)
-    .allow('')
-    .optional(),
-  email: Joi.string()
-    .trim()
-    .email()
-    .allow('')
-    .optional()
-    .messages({
-      'string.email': 'Please provide a valid email address',
-    }),
-  message: Joi.string()
-    .trim()
-    .max(1000)
-    .required()
-    .messages({
-      'string.empty': 'Message is required',
-      'string.max': 'Message must not exceed 1000 characters',
-    }),
-});
+  city: Joi.string().trim().max(100).optional().allow('', null),
+  pinCode: Joi.string().trim().max(20).optional().allow('', null),
+  landmark: Joi.string().trim().max(200).optional().allow('', null),
+  email: Joi.string().trim().email().optional().allow('', null).messages({
+    'string.email': 'Please enter a valid email address',
+  }),
+  message: Joi.string().trim().max(1000).optional().allow('', null),
+  latitude: Joi.number().optional().allow(null),
+  longitude: Joi.number().optional().allow(null),
+}).unknown(true);
+
+const updateContactMessageSchema = Joi.object({
+  status: Joi.string().valid('pending', 'contacted', 'resolved').optional(),
+  notes: Joi.string().trim().max(2000).optional().allow('', null),
+  hotelName: Joi.string().trim().min(2).max(100).optional(),
+  contactNumber: Joi.string().trim().optional(),
+  address: Joi.string().trim().max(500).optional().allow('', null),
+  city: Joi.string().trim().max(100).optional().allow('', null),
+  pinCode: Joi.string().trim().max(20).optional().allow('', null),
+  landmark: Joi.string().trim().max(200).optional().allow('', null),
+  email: Joi.string().trim().email().optional().allow('', null),
+  message: Joi.string().trim().max(1000).optional().allow('', null),
+}).unknown(true);
 
 module.exports = {
   sendMessageSchema,
+  updateContactMessageSchema,
 };

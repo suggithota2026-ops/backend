@@ -10,6 +10,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { UPLOAD_DIR, MAX_FILE_SIZE } = require('../../config/env');
 const cloudinaryService = require('../../services/cloudinary.service');
+const { applyAdminProductsCatalogFilter } = require('../../utils/productVisibility');
 
 // Inline file upload functions (workaround for file service issues)
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
@@ -184,6 +185,13 @@ const createProduct = async (request, reply) => {
     if (productData.isActive !== undefined) {
       productData.isActive = productData.isActive === 'true' || productData.isActive === true;
     }
+    if (productData.isContractOnly !== undefined) {
+      productData.isContractOnly =
+        productData.isContractOnly === 'true' || productData.isContractOnly === true;
+    } else {
+      // Admin Products sidebar creates are always catalog (not Fixed Excel)
+      productData.isContractOnly = false;
+    }
     if (productData.pricingType && typeof productData.pricingType === 'string') {
       productData.pricingType = productData.pricingType.toLowerCase();
     }
@@ -272,9 +280,18 @@ const getProducts = async (request, reply) => {
       status,
       isActive,
       search,
+      includeContractOnly,
     } = request.query;
 
     const where = {};
+    // Same catalog filter used by Daily/Weekly app product APIs
+    const includeContract =
+      includeContractOnly === true ||
+      includeContractOnly === 'true' ||
+      includeContractOnly === '1';
+    if (!includeContract) {
+      applyAdminProductsCatalogFilter(where);
+    }
     if (category) {
       const categoryId = parseInt(category);
       if (!isNaN(categoryId)) {
@@ -570,6 +587,10 @@ const updateProduct = async (request, reply) => {
     if (updateData.minStockLevel) updateData.minStockLevel = parseFloat(updateData.minStockLevel);
     if (updateData.displayOrder) updateData.displayOrder = parseInt(updateData.displayOrder);
     if (updateData.isActive !== undefined) updateData.isActive = updateData.isActive === 'true' || updateData.isActive === true;
+    if (updateData.isContractOnly !== undefined) {
+      updateData.isContractOnly =
+        updateData.isContractOnly === 'true' || updateData.isContractOnly === true;
+    }
 
     await product.update(updateData);
 
@@ -687,12 +708,14 @@ const getProductsBySubcategory = async (request, reply) => {
 
     const [products, total] = await Promise.all([
       Product.findAll({
-        where: subcategoryCondition,
+        where: applyAdminProductsCatalogFilter({ ...subcategoryCondition }),
         order: [['displayOrder', 'ASC'], ['createdAt', 'DESC']],
         offset,
         limit: parseInt(limit),
       }),
-      Product.count({ where: subcategoryCondition }),
+      Product.count({
+        where: applyAdminProductsCatalogFilter({ ...subcategoryCondition }),
+      }),
     ]);
 
     // Get category names for products

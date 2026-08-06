@@ -21,6 +21,10 @@ const formatProfileResponse = (user) => {
       hotelName: data.hotelName || null,
       gstNumber: data.gstNumber || null,
       address: data.address || null,
+      city: data.city || null,
+      pinCode: data.pinCode || null,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
     },
   };
 };
@@ -79,6 +83,12 @@ const updateProfile = async (request, reply) => {
       body.address ??
       body.hotelAddress ??
       body.hotel_address;
+    const city = business.city ?? body.city;
+    const pinCode =
+      business.pinCode ?? body.pinCode ?? body.pincode ?? body.postalCode;
+    const latitude = business.latitude ?? body.latitude ?? body.lat;
+    const longitude =
+      business.longitude ?? body.longitude ?? body.lng ?? body.lon;
     const gstNumber =
       business.gstNumber ??
       body.gstNumber ??
@@ -92,6 +102,10 @@ const updateProfile = async (request, reply) => {
       email === undefined &&
       hotelName === undefined &&
       address === undefined &&
+      city === undefined &&
+      pinCode === undefined &&
+      latitude === undefined &&
+      longitude === undefined &&
       gstNumber === undefined &&
       fcmToken === undefined
     ) {
@@ -132,6 +146,26 @@ const updateProfile = async (request, reply) => {
     if (address !== undefined) {
       const value = String(address).trim();
       updateData.address = value || null;
+    }
+
+    if (city !== undefined) {
+      const value = String(city).trim();
+      updateData.city = value || null;
+    }
+
+    if (pinCode !== undefined) {
+      const value = String(pinCode).trim();
+      updateData.pinCode = value || null;
+    }
+
+    if (latitude !== undefined && latitude !== null && latitude !== '') {
+      const lat = Number(latitude);
+      if (!Number.isNaN(lat)) updateData.latitude = lat;
+    }
+
+    if (longitude !== undefined && longitude !== null && longitude !== '') {
+      const lng = Number(longitude);
+      if (!Number.isNaN(lng)) updateData.longitude = lng;
     }
 
     if (gstNumber !== undefined) {

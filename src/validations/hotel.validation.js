@@ -6,7 +6,7 @@ const createHotelSchema = Joi.object({
     .pattern(/^[0-9]{10}$/)
     .required(),
   hotelName: Joi.string().trim().min(2).max(100).required(),
-  address: Joi.string().trim().min(5).max(500).required(),
+  address: Joi.string().trim().max(500).optional().allow('', null),
   gstNumber: Joi.string()
     .trim()
     .pattern(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/)
@@ -28,7 +28,7 @@ const createHotelSchema = Joi.object({
 
 const updateHotelSchema = Joi.object({
   hotelName: Joi.string().trim().min(2).max(100).optional(),
-  address: Joi.string().trim().min(5).max(500).optional(),
+  address: Joi.string().trim().max(500).optional().allow('', null),
   gstNumber: Joi.string()
     .trim()
     .pattern(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/)

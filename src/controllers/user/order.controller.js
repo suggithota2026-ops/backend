@@ -7,7 +7,7 @@ const { sendSuccess, sendError } = require('../../utils/response');
 const { ORDER_STATUS } = require('../../config/constants');
 const { sendAdminOrderNotification } = require('../../services/notification.service');
 const logger = require('../../utils/logger');
-const { getActiveCustomerPricing } = require('../../services/customerPricing.service');
+const { getActiveCustomerPricing, isFixedPriceRateType } = require('../../services/customerPricing.service');
 
 async function buildOrderItems(items, hotelId) {
   const user = await User.findByPk(hotelId);
@@ -36,6 +36,10 @@ async function buildOrderItems(items, hotelId) {
       return { error: `Product ${product.name} is currently out of stock`, statusCode: 400 };
     }
 
+    if (!isFixedPriceRateType(user.rateType) && product.isContractOnly !== false) {
+      return { error: `Product ${product.name} is not available`, statusCode: 400 };
+    }
+
     if (item.quantity < product.stock) {
       return {
         error: `Minimum order quantity for ${product.name} is ${product.stock} ${product.unit || 'units'}.`,
@@ -44,7 +48,7 @@ async function buildOrderItems(items, hotelId) {
     }
 
     let unitPrice;
-    if (user.rateType === 'Fixed Price') {
+    if (isFixedPriceRateType(user.rateType)) {
       const customerSpecificPrice = await getActiveCustomerPricing(hotelId, productId);
       if (customerSpecificPrice == null || Number.isNaN(Number(customerSpecificPrice))) {
         return {

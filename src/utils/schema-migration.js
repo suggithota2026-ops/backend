@@ -37,6 +37,7 @@ const runSchemaMigration = async () => {
         // 3. Check Products table
         await addColumnIfNotExists('products', 'subcategory', 'VARCHAR(255)');
         await addColumnIfNotExists('products', 'pricingType', "VARCHAR(50) DEFAULT 'fixed'");
+        await addColumnIfNotExists('products', 'isContractOnly', 'BOOLEAN DEFAULT FALSE');
         await addColumnIfNotExists('products', 'createdById', 'INTEGER REFERENCES "admins"("id")');
 
         // 4. Update stock and minStockLevel column types to DECIMAL
@@ -134,6 +135,24 @@ const runSchemaMigration = async () => {
         } catch (err) {
             const msg = (err && err.message) ? err.message : String(err);
             logger.error('Failed to update paymentMethod enum: ' + msg);
+        }
+
+        // Legacy Excel contract products (auto-created, no images) — hide from Daily/Weekly catalog
+        try {
+            const [backfillResult] = await sequelize.query(`
+                UPDATE products
+                SET "isContractOnly" = TRUE
+                WHERE "isContractOnly" = FALSE
+                  AND id IN (SELECT DISTINCT "productId" FROM customer_product_pricing)
+                  AND (images IS NULL OR images::text IN ('[]', 'null', ''))
+                  AND (description IS NULL OR description = '')
+            `);
+            if (backfillResult?.rowCount > 0) {
+                logger.info(`Marked ${backfillResult.rowCount} legacy contract product(s) as contract-only`);
+            }
+        } catch (backfillErr) {
+            const msg = (backfillErr && backfillErr.message) ? backfillErr.message : String(backfillErr);
+            logger.warn('Legacy contract-only backfill skipped or failed: ' + msg);
         }
 
         logger.info('Schema migration check completed.');

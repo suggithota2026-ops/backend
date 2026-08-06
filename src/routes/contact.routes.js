@@ -4,7 +4,6 @@ const { sendValidationError } = require('../utils/response');
 const { sendMessageSchema } = require('../validations/contact.validation');
 
 const contactRoutes = async (fastify, options) => {
-  // Send contact message (Public)
   fastify.post('/send-message', {
     schema: {
       tags: ['contact'],
@@ -12,38 +11,24 @@ const contactRoutes = async (fastify, options) => {
       description: 'Submit a contact form with hotel details and message',
       body: {
         type: 'object',
-        required: ['hotelName', 'contactNumber', 'address', 'city', 'pinCode', 'message'],
+        additionalProperties: true,
+        required: ['hotelName', 'contactNumber', 'address'],
         properties: {
           hotelName: { type: 'string', minLength: 2, maxLength: 100 },
-          contactNumber: { type: 'string', pattern: '^[0-9]{10}$' },
-          address: { type: 'string', maxLength: 500 },
-          city: { type: 'string', minLength: 2, maxLength: 100 },
-          pinCode: { type: 'string', pattern: '^[0-9]{6}$' },
+          contactNumber: { type: 'string' },
+          address: { type: 'string', minLength: 1, maxLength: 500 },
+          city: { type: 'string', maxLength: 100 },
+          pinCode: { type: 'string', maxLength: 20 },
           landmark: { type: 'string', maxLength: 200 },
-          email: { type: 'string', format: 'email' },
+          email: { type: 'string' },
           message: { type: 'string', maxLength: 1000 },
-        },
-      },
-      response: {
-        201: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            message: { type: 'string' },
-            data: {
-              type: 'object',
-              properties: {
-                id: { type: 'number' },
-                hotelName: { type: 'string' },
-                status: { type: 'string' },
-              },
-            },
-          },
+          latitude: { type: 'number' },
+          longitude: { type: 'number' },
         },
       },
     },
     preValidation: async (request, reply) => {
-      const { error } = sendMessageSchema.validate(request.body);
+      const { error } = sendMessageSchema.validate(request.body || {}, { allowUnknown: true });
       if (error) {
         return sendValidationError(reply, error.details);
       }

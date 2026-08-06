@@ -5,7 +5,21 @@ const Category = require('../../models/category.model');
 const User = require('../../models/user.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
-const { applyCustomerPricesToProducts } = require('../../services/customerPricing.service');
+const { applyCustomerPricesToProducts, isFixedPriceRateType } = require('../../services/customerPricing.service');
+const { applyAdminProductsCatalogFilter } = require('../../utils/productVisibility');
+
+/** Fixed: unchanged (pricing filter later). Daily/Weekly: same filter as admin Products sidebar. */
+const applyCatalogVisibilityFilter = async (where, userId) => {
+  if (!userId) {
+    applyAdminProductsCatalogFilter(where);
+    return where;
+  }
+  const user = await User.findByPk(Number(userId));
+  if (!user || !isFixedPriceRateType(user.rateType)) {
+    applyAdminProductsCatalogFilter(where);
+  }
+  return where;
+};
 
 // Helper function to get file URL (inline version if service file has issues)
 const getFileUrl = (filePath) => {
@@ -151,6 +165,8 @@ const getProducts = async (request, reply) => {
       ];
     }
 
+    await applyCatalogVisibilityFilter(where, request.user?.id);
+
     const products = await Product.findAll({
       where,
       order: [
@@ -221,12 +237,15 @@ const getProduct = async (request, reply) => {
     }
 
     // Get all products by category ID
+    const categoryWhere = {
+      categoryId: categoryId,
+      isActive: true,
+      status: { [Op.in]: ['active', 'inactive', 'out_of_stock'] },
+    };
+    await applyCatalogVisibilityFilter(categoryWhere, request.user?.id);
+
     const products = await Product.findAll({
-      where: {
-        categoryId: categoryId,
-        isActive: true,
-        status: { [Op.in]: ['active', 'inactive', 'out_of_stock'] },
-      },
+      where: categoryWhere,
       order: [
         ['displayOrder', 'ASC'],
         ['name', 'ASC'],
@@ -291,12 +310,15 @@ const getProductsBySubcategory = async (request, reply) => {
       }
     }
 
+    const subcategoryProductWhere = {
+      ...subcategoryWhere,
+      isActive: true,
+      status: { [Op.in]: ['active', 'inactive', 'out_of_stock'] },
+    };
+    await applyCatalogVisibilityFilter(subcategoryProductWhere, request.user?.id);
+
     const products = await Product.findAll({
-      where: {
-        ...subcategoryWhere,
-        isActive: true,
-        status: { [Op.in]: ['active', 'inactive', 'out_of_stock'] },
-      },
+      where: subcategoryProductWhere,
       order: [
         ['displayOrder', 'ASC'],
         ['name', 'ASC'],
@@ -375,8 +397,12 @@ const getProductById = async (request, reply) => {
     const [priced] = await applyCustomerPricesToProducts([productData], request.user?.id);
     if (!priced) {
       const user = request.user?.id ? await User.findByPk(request.user.id) : null;
-      if (user?.rateType === 'Fixed Price') {
+      if (user && isFixedPriceRateType(user.rateType)) {
         return sendError(reply, 'This product is not in your fixed-rate contract', 404);
+      }
+      // Daily/Weekly: hide Fixed Excel / contract-only SKUs
+      if (productData.isContractOnly !== false) {
+        return sendError(reply, 'Product not found', 404);
       }
     } else {
       productData = priced;
@@ -389,10 +415,65 @@ const getProductById = async (request, reply) => {
   }
 };
 
+/** Featured / home carousel — same visibility rules as getProducts */
+const getFeaturedProducts = async (request, reply) => {
+  try {
+    const limit = Math.min(parseInt(request.query.limit, 10) || 12, 50);
+    const where = {
+      isActive: true,
+      status: { [Op.in]: ['active', 'inactive', 'out_of_stock'] },
+    };
+    await applyCatalogVisibilityFilter(where, request.user?.id);
+
+    const products = await Product.findAll({
+      where,
+      order: [
+        ['displayOrder', 'ASC'],
+        ['name', 'ASC'],
+      ],
+      limit,
+    });
+
+    const categoryIds = [...new Set(products.map((p) => p.categoryId))];
+    const categoryData =
+      categoryIds.length > 0
+        ? await Category.findAll({
+            where: { id: { [Op.in]: categoryIds } },
+            attributes: ['id', 'name'],
+          })
+        : [];
+    const categoryMap = new Map(categoryData.map((c) => [c.id, c.name]));
+
+    let productsWithImages = products.map((product) => {
+      const p = transformProductImages(product, request);
+      return {
+        ...p,
+        status: p.status === 'inactive' ? 'out_of_stock' : p.status,
+        minQuantity: p.stock,
+        category: {
+          id: p.categoryId,
+          name: categoryMap.get(p.categoryId) || null,
+        },
+      };
+    });
+
+    productsWithImages = await applyCustomerPricesToProducts(
+      productsWithImages,
+      request.user?.id
+    );
+
+    return sendSuccess(reply, productsWithImages, 'Featured products retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching featured products:', error);
+    return sendError(reply, 'Failed to fetch featured products', 500);
+  }
+};
+
 module.exports = {
   getCategories,
   getProducts,
   getProduct,
   getProductById,
   getProductsBySubcategory,
+  getFeaturedProducts,
 };

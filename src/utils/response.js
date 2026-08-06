@@ -22,7 +22,9 @@ const sendError = (reply, message = 'Error', statusCode = 400, errors = null) =>
 };
 
 const sendValidationError = (reply, errors) => {
-  return sendError(reply, 'Validation failed', 422, errors);
+  const firstMessage =
+    Array.isArray(errors) && errors.length > 0 ? errors[0]?.message : null;
+  return sendError(reply, firstMessage || 'Validation failed', 422, errors);
 };
 
 module.exports = {

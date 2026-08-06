@@ -39,6 +39,7 @@ const hotelRoutes = async (fastify, options) => {
             type: 'array',
             items: {
               type: 'object',
+              additionalProperties: true,
               properties: {
                 productId: { type: 'number' },
                 fixedPrice: { type: 'number' },
@@ -103,6 +104,7 @@ const hotelRoutes = async (fastify, options) => {
       },
       body: {
         type: 'object',
+        additionalProperties: true,
         properties: {
           hotelName: { type: 'string' },
           address: { type: 'string' },
@@ -111,6 +113,20 @@ const hotelRoutes = async (fastify, options) => {
           isBlocked: { type: 'boolean' },
           rateType: { type: 'string' },
           pricePerUnit: { type: 'number' },
+          contractDuration: { type: 'string' },
+          contractStartDate: { type: 'string' },
+          contractEndDate: { type: 'string' },
+          customerProductPricing: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: true,
+              properties: {
+                productId: { type: 'number' },
+                fixedPrice: { type: 'number' },
+              },
+            },
+          },
         },
       },
     },

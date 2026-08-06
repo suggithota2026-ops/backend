@@ -16,6 +16,7 @@ const createProductSchema = Joi.object({
     .valid(...Object.values(PRODUCT_STATUS))
     .default(PRODUCT_STATUS.ACTIVE),
   isActive: Joi.boolean().default(true),
+  isContractOnly: Joi.boolean().default(false),
   displayOrder: Joi.number().default(0),
 });
 
@@ -33,6 +34,7 @@ const updateProductSchema = Joi.object({
     .valid(...Object.values(PRODUCT_STATUS))
     .optional(),
   isActive: Joi.boolean().optional(),
+  isContractOnly: Joi.boolean().optional(),
   displayOrder: Joi.number().optional(),
 });
 

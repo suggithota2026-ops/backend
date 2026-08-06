@@ -41,6 +41,14 @@ const setupProfileSchema = Joi.object({
   address: Joi.string().trim().max(500).optional().allow('', null),
   hotelAddress: Joi.string().trim().max(500).optional().allow('', null),
   hotel_address: Joi.string().trim().max(500).optional().allow('', null),
+  city: Joi.string().trim().max(100).optional().allow('', null),
+  pinCode: Joi.string().trim().max(20).optional().allow('', null),
+  pincode: Joi.string().trim().max(20).optional().allow('', null),
+  postalCode: Joi.string().trim().max(20).optional().allow('', null),
+  latitude: Joi.number().optional().allow(null),
+  longitude: Joi.number().optional().allow(null),
+  lat: Joi.number().optional().allow(null),
+  lng: Joi.number().optional().allow(null),
   gstNumber: Joi.string().trim().max(20).optional().allow('', null),
   gst_number: Joi.string().trim().max(20).optional().allow('', null),
   gstin: Joi.string().trim().max(20).optional().allow('', null),
@@ -49,10 +57,25 @@ const setupProfileSchema = Joi.object({
     hotelName: Joi.string().trim().max(100).optional().allow('', null),
     name: Joi.string().trim().max(100).optional().allow('', null),
     address: Joi.string().trim().max(500).optional().allow('', null),
+    city: Joi.string().trim().max(100).optional().allow('', null),
+    pinCode: Joi.string().trim().max(20).optional().allow('', null),
     gstNumber: Joi.string().trim().max(20).optional().allow('', null),
   }).optional(),
   fcmToken: Joi.string().optional().allow('', null),
   fcm_token: Joi.string().optional().allow('', null),
+}).unknown(true);
+
+const updateLocationSchema = Joi.object({
+  address: Joi.string().trim().max(500).optional().allow('', null),
+  hotelAddress: Joi.string().trim().max(500).optional().allow('', null),
+  city: Joi.string().trim().max(100).optional().allow('', null),
+  pinCode: Joi.string().trim().max(20).optional().allow('', null),
+  pincode: Joi.string().trim().max(20).optional().allow('', null),
+  postalCode: Joi.string().trim().max(20).optional().allow('', null),
+  latitude: Joi.number().optional().allow(null),
+  longitude: Joi.number().optional().allow(null),
+  lat: Joi.number().optional().allow(null),
+  lng: Joi.number().optional().allow(null),
 }).unknown(true);
 
 const updateFCMTokenSchema = Joi.object({
@@ -63,5 +86,6 @@ module.exports = {
   sendOTPSchema,
   verifyOTPSchema,
   setupProfileSchema,
+  updateLocationSchema,
   updateFCMTokenSchema,
 };

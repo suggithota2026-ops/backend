@@ -2,6 +2,9 @@ const CustomerProductPricing = require('../models/customer.product.pricing.model
 const User = require('../models/user.model');
 const logger = require('../utils/logger');
 
+const isFixedPriceRateType = (rateType) =>
+  String(rateType || '').trim().toLowerCase() === 'fixed price';
+
 /** Parse YYYY-MM-DD (or Date) as local calendar start-of-day */
 const toStartOfDay = (value) => {
   if (value == null || value === '') return null;
@@ -94,7 +97,7 @@ const getActiveCustomerPricingMap = async (customerId) => {
  * For Fixed Price customers:
  * - Only products with an active fixed price are returned
  * - product.price is the contract fixedPrice (not daily catalog rate)
- * Daily / Weekly customers get the catalog list unchanged.
+ * Daily / Weekly: same catalog as admin Products sidebar (isContractOnly === false).
  */
 const applyCustomerPricesToProducts = async (products, userId) => {
   if (!userId || !Array.isArray(products) || products.length === 0) {
@@ -102,14 +105,16 @@ const applyCustomerPricesToProducts = async (products, userId) => {
   }
 
   try {
-    const user = await User.findByPk(userId);
-    if (!user || user.rateType !== 'Fixed Price') {
-      return products;
+    const user = await User.findByPk(Number(userId));
+    if (!user || !isFixedPriceRateType(user.rateType)) {
+      // Daily / Weekly — identical to admin Products sidebar filter
+      return products.filter(
+        (product) => product && typeof product === 'object' && product.isContractOnly === false
+      );
     }
 
     const priceMap = await getActiveCustomerPricingMap(user.id);
     if (priceMap.size === 0) {
-      // No active fixed prices — do not fall back to daily catalog rates
       return [];
     }
 
@@ -133,7 +138,17 @@ const applyCustomerPricesToProducts = async (products, userId) => {
       .filter(Boolean);
   } catch (error) {
     logger.error('Error applying customer prices to products:', error);
-    return products;
+    try {
+      const user = await User.findByPk(Number(userId));
+      if (user && isFixedPriceRateType(user.rateType)) {
+        return [];
+      }
+    } catch (_) {
+      // ignore
+    }
+    return products.filter(
+      (product) => product && typeof product === 'object' && product.isContractOnly === false
+    );
   }
 };
 
@@ -141,6 +156,7 @@ module.exports = {
   toStartOfDay,
   toEndOfDay,
   isContractActiveToday,
+  isFixedPriceRateType,
   getActiveCustomerPricing,
   getActiveCustomerPricingMap,
   applyCustomerPricesToProducts,
