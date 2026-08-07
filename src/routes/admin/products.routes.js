@@ -1,6 +1,7 @@
 // Admin product routes
 const {
   createProduct,
+  createContractProductsBulk,
   getProducts,
   getProduct,
   updateProduct,
@@ -28,6 +29,41 @@ const productRoutes = async (fastify, options) => {
     // Multipart create payload is parsed in controller via request.parts().
     // Validating request.body here can incorrectly fail with empty body.
   }, createProduct);
+
+  // Bulk Fixed Excel contract products — one request, never shown in Products sidebar
+  fastify.post('/products/bulk-contract', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Bulk create contract-only products (Fixed Price Excel)',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['products'],
+        additionalProperties: true,
+        properties: {
+          products: {
+            type: 'array',
+            maxItems: 50,
+            items: {
+              type: 'object',
+              additionalProperties: true,
+              properties: {
+                name: { type: 'string' },
+                categoryId: { type: 'number' },
+                category: { type: 'number' },
+                subcategory: { type: 'string' },
+                price: { type: 'number' },
+                unit: { type: 'string' },
+                stock: { type: 'number' },
+                rowNumber: { type: 'number' },
+              },
+            },
+          },
+        },
+      },
+    },
+    // preHandler: [authenticate, requireAdmin],
+  }, createContractProductsBulk);
 
   fastify.get('/products', {
     schema: {

@@ -809,8 +809,118 @@ const updatePrice = async (request, reply) => {
   }
 };
 
+/**
+ * Bulk-create Fixed Excel / contract-only products in ONE request
+ * (avoids rate-limit when uploading many rows). Never appears in Products sidebar.
+ */
+const createContractProductsBulk = async (request, reply) => {
+  try {
+    const userId = request.user?.id || 1;
+    const items = request.body?.products;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return sendError(reply, 'products array is required', 400);
+    }
+    if (items.length > 50) {
+      return sendError(reply, 'Maximum 50 products allowed per upload. Split the Excel and try again.', 400);
+    }
+
+    const created = [];
+    const errors = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i] || {};
+      const rowLabel = item.rowNumber != null ? `Row ${item.rowNumber}` : `Item ${i + 1}`;
+      try {
+        const name = String(item.name || '').trim();
+        const categoryId = parseInt(item.categoryId ?? item.category, 10);
+        const price = Number(item.price);
+        const unit = String(item.unit || 'kg').trim() || 'kg';
+        const stock = item.stock != null && item.stock !== '' ? Number(item.stock) : 0.5;
+        let subcategory =
+          item.subcategory != null && String(item.subcategory).trim()
+            ? String(item.subcategory).trim()
+            : null;
+
+        if (!name || name.length < 2) {
+          throw new Error('invalid name');
+        }
+        if (isNaN(categoryId)) {
+          throw new Error('invalid category');
+        }
+        if (Number.isNaN(price) || price < 0) {
+          throw new Error('invalid price');
+        }
+        if (Number.isNaN(stock) || stock < 0) {
+          throw new Error('invalid minimumQuantity');
+        }
+
+        const category = await Category.findByPk(categoryId);
+        if (!category) {
+          throw new Error('category not found');
+        }
+
+        if (subcategory) {
+          const categorySubcategories = category.subcategories || [];
+          const subObj = categorySubcategories.find(
+            (s) => s.id === subcategory || s.name === subcategory
+          );
+          if (categorySubcategories.length > 0 && !subObj) {
+            throw new Error(`subcategory "${subcategory}" not found`);
+          }
+          subcategory = subObj ? subObj.id : subcategory;
+        }
+
+        const product = await Product.create({
+          name,
+          description: null,
+          categoryId,
+          subcategory,
+          price,
+          pricingType: 'fixed',
+          unit,
+          stock,
+          minStockLevel: 0,
+          status: 'active',
+          isActive: true,
+          isContractOnly: true,
+          displayOrder: 0,
+          images: [],
+          createdById: parseInt(userId, 10) || null,
+        });
+
+        created.push({
+          id: product.id,
+          name: product.name,
+          categoryId: product.categoryId,
+          price: product.price,
+          rowNumber: item.rowNumber,
+        });
+      } catch (rowError) {
+        errors.push({
+          rowNumber: item.rowNumber ?? i + 1,
+          name: item.name || null,
+          message: rowError.message || 'failed to create',
+        });
+        logger.warn(`${rowLabel} bulk contract create failed: ${rowError.message}`);
+      }
+    }
+
+    return sendSuccess(
+      reply,
+      { created, errors },
+      `Created ${created.length} contract product(s)${errors.length ? `, ${errors.length} failed` : ''}`,
+      201
+    );
+  } catch (error) {
+    logger.error('Error bulk-creating contract products:', error);
+    return sendError(reply, error.message || 'Failed to create contract products', 500);
+  }
+};
+
 module.exports = {
   createProduct,
+  createContractProductsBulk,
   getProducts,
   getProduct,
   updateProduct,
