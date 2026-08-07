@@ -2,6 +2,7 @@
 const {
   createProduct,
   createContractProductsBulk,
+  createCatalogProductsBulk,
   getProducts,
   getProduct,
   updateProduct,
@@ -44,7 +45,7 @@ const productRoutes = async (fastify, options) => {
           customerId: { type: ['number', 'null'] },
           products: {
             type: 'array',
-            maxItems: 150,
+            maxItems: 500,
             items: {
               type: 'object',
               additionalProperties: true,
@@ -66,6 +67,42 @@ const productRoutes = async (fastify, options) => {
     },
     // preHandler: [authenticate, requireAdmin],
   }, createContractProductsBulk);
+
+  // Bulk Product Master catalog — one request, never customer_fixed
+  fastify.post('/products/bulk-catalog', {
+    schema: {
+      tags: ['admin'],
+      summary: 'Bulk create Product Master catalog products',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['products'],
+        additionalProperties: true,
+        properties: {
+          products: {
+            type: 'array',
+            maxItems: 500,
+            items: {
+              type: 'object',
+              additionalProperties: true,
+              properties: {
+                name: { type: 'string' },
+                categoryId: { type: 'number' },
+                category: { type: ['number', 'string'] },
+                categoryName: { type: 'string' },
+                subcategory: { type: 'string' },
+                price: { type: 'number' },
+                unit: { type: 'string' },
+                stock: { type: 'number' },
+                rowNumber: { type: 'number' },
+              },
+            },
+          },
+        },
+      },
+    },
+    // preHandler: [authenticate, requireAdmin],
+  }, createCatalogProductsBulk);
 
   fastify.get('/products', {
     schema: {

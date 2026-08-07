@@ -12,6 +12,7 @@ const { UPLOAD_DIR, MAX_FILE_SIZE } = require('../../config/env');
 const cloudinaryService = require('../../services/cloudinary.service');
 const { applyAdminProductsCatalogFilter, PRODUCT_SOURCE } = require('../../utils/productVisibility');
 const { bulkCreateCustomerFixedProducts } = require('../../services/customerFixedProduct.service');
+const { bulkCreateCatalogProducts } = require('../../services/catalogProductBulk.service');
 
 // Inline file upload functions (workaround for file service issues)
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
@@ -822,7 +823,7 @@ const updatePrice = async (request, reply) => {
 };
 
 /**
- * Bulk-create Customer Fixed Rate products in ONE request (transaction, duplicate detection).
+ * Bulk-create Customer Fixed Rate products in ONE request (duplicate detection).
  */
 const createContractProductsBulk = async (request, reply) => {
   try {
@@ -848,9 +849,35 @@ const createContractProductsBulk = async (request, reply) => {
   }
 };
 
+/**
+ * Bulk-create Product Master catalog products in ONE request.
+ */
+const createCatalogProductsBulk = async (request, reply) => {
+  try {
+    const userId = request.user?.id || 1;
+    const items = request.body?.products;
+
+    const { created, matched, errors } = await bulkCreateCatalogProducts({
+      items,
+      createdById: userId,
+    });
+
+    return sendSuccess(
+      reply,
+      { created, matched, errors },
+      `Created ${created.length} product(s)${matched.length ? `, ${matched.length} matched existing` : ''}${errors.length ? `, ${errors.length} failed` : ''}`,
+      201
+    );
+  } catch (error) {
+    logger.error('Error bulk-creating catalog products:', error);
+    return sendError(reply, error.message || 'Failed to create catalog products', 500);
+  }
+};
+
 module.exports = {
   createProduct,
   createContractProductsBulk,
+  createCatalogProductsBulk,
   getProducts,
   getProduct,
   updateProduct,

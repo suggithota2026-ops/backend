@@ -1,4 +1,3 @@
-const { mongoose } = require('../config/db');
 const Product = require('../models/product.model');
 const Category = require('../models/category.model');
 const User = require('../models/user.model');
@@ -6,7 +5,7 @@ const { ROLES } = require('../config/constants');
 const { PRODUCT_SOURCE } = require('../utils/productVisibility');
 const logger = require('../utils/logger');
 
-const MAX_BULK_ITEMS = 150;
+const MAX_BULK_ITEMS = 500;
 
 const normalizeProductName = (name) =>
   String(name || '')
@@ -129,7 +128,8 @@ const validateBulkItem = (item, categoryMaps) => {
 };
 
 /**
- * Bulk-create Customer Fixed Rate products in one transaction.
+ * Bulk-create Customer Fixed Rate products in ONE request.
+ * No Mongo transaction (works on standalone Atlas / local without replica set).
  * Returns created + matched (duplicate) + errors for partial failure reporting.
  */
 const bulkCreateCustomerFixedProducts = async ({
@@ -164,91 +164,74 @@ const bulkCreateCustomerFixedProducts = async ({
   const errors = [];
   const batchNames = new Set();
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i] || {};
+    const rowNumber = item.rowNumber != null ? Number(item.rowNumber) : i + 1;
 
-  try {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i] || {};
-      const rowNumber = item.rowNumber != null ? Number(item.rowNumber) : i + 1;
+    try {
+      const validated = validateBulkItem(item, categoryMaps);
+      const normName = normalizeProductName(validated.name);
 
-      try {
-        const validated = validateBulkItem(item, categoryMaps);
-        const normName = normalizeProductName(validated.name);
-
-        if (batchNames.has(normName)) {
-          throw new Error('duplicate product name in this upload');
-        }
-        batchNames.add(normName);
-
-        const existing = existingByName.get(normName);
-        if (existing) {
-          if (
-            existing.ownerCustomerId != null &&
-            numericCustomerId != null &&
-            Number(existing.ownerCustomerId) !== numericCustomerId
-          ) {
-            throw new Error('product name belongs to another customer');
-          }
-          matched.push({
-            id: Number(existing.id),
-            name: existing.name,
-            categoryId: validated.categoryId,
-            rowNumber,
-            duplicate: true,
-          });
-          continue;
-        }
-
-        const [product] = await Product.create(
-          [
-            {
-              name: validated.name,
-              description: null,
-              categoryId: validated.categoryId,
-              subcategory: validated.subcategory,
-              price: validated.price,
-              pricingType: 'fixed',
-              productSource: PRODUCT_SOURCE.CUSTOMER_FIXED,
-              ownerCustomerId: numericCustomerId,
-              unit: validated.unit,
-              stock: validated.stock,
-              minStockLevel: 0,
-              status: 'active',
-              isActive: true,
-              isContractOnly: true,
-              displayOrder: 0,
-              images: [],
-              createdById: createdById ? parseInt(createdById, 10) : null,
-            },
-          ],
-          { session }
-        );
-
-        existingByName.set(normName, product);
-        created.push({
-          id: Number(product.id),
-          name: product.name,
-          categoryId: product.categoryId,
-          price: product.price,
-          rowNumber,
-        });
-      } catch (rowError) {
-        errors.push({
-          rowNumber,
-          name: item.name || null,
-          message: rowError.message || 'failed to create',
-        });
-        logger.warn(`Row ${rowNumber} bulk customer-fixed create failed: ${rowError.message}`);
+      if (batchNames.has(normName)) {
+        throw new Error('duplicate product name in this upload');
       }
-    }
+      batchNames.add(normName);
 
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
+      const existing = existingByName.get(normName);
+      if (existing) {
+        if (
+          existing.ownerCustomerId != null &&
+          numericCustomerId != null &&
+          Number(existing.ownerCustomerId) !== numericCustomerId
+        ) {
+          throw new Error('product name belongs to another customer');
+        }
+        matched.push({
+          id: Number(existing.id),
+          name: existing.name,
+          categoryId: validated.categoryId,
+          rowNumber,
+          duplicate: true,
+        });
+        continue;
+      }
+
+      const product = await Product.create({
+        name: validated.name,
+        description: null,
+        categoryId: validated.categoryId,
+        subcategory: validated.subcategory,
+        price: validated.price,
+        pricingType: 'fixed',
+        productSource: PRODUCT_SOURCE.CUSTOMER_FIXED,
+        ownerCustomerId: numericCustomerId,
+        unit: validated.unit,
+        stock: validated.stock,
+        minStockLevel: 0,
+        status: 'active',
+        isActive: true,
+        isContractOnly: true,
+        displayOrder: 0,
+        images: [],
+        createdById: createdById ? parseInt(createdById, 10) : null,
+      });
+
+      existingByName.set(normName, product);
+      created.push({
+        id: Number(product.id),
+        name: product.name,
+        categoryId: product.categoryId,
+        price: product.price,
+        rowNumber,
+      });
+    } catch (rowError) {
+      errors.push({
+        rowNumber,
+        name: item.name || null,
+        message: rowError.message || 'failed to create',
+      });
+      logger.warn(`Row ${rowNumber} bulk customer-fixed create failed: ${rowError.message}`);
+    }
   }
 
   return { created, matched, errors };
@@ -297,6 +280,8 @@ module.exports = {
   MAX_BULK_ITEMS,
   normalizeProductName,
   loadCategoryMaps,
+  resolveCategoryId,
+  resolveSubcategoryId,
   bulkCreateCustomerFixedProducts,
   assignCustomerOwnership,
 };
