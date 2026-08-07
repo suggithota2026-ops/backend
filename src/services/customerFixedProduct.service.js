@@ -116,11 +116,13 @@ const validateBulkItem = (item, categoryMaps) => {
       ? String(item.subcategory).trim()
       : null;
   if (subcategory) {
-    subcategory = resolveSubcategoryId(categoryId, subcategory, categoryMaps.byId);
+    const resolved = resolveSubcategoryId(categoryId, subcategory, categoryMaps.byId);
     const category = categoryMaps.byId.get(categoryId);
     const subs = category?.subcategories || [];
-    if (subs.length > 0 && !subcategory) {
-      throw new Error(`subcategory "${item.subcategory}" not found`);
+    if (subs.length > 0 && !resolved) {
+      subcategory = null;
+    } else {
+      subcategory = resolved || subcategory;
     }
   }
 
