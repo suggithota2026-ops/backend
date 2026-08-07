@@ -8,7 +8,7 @@ const logger = require('../../utils/logger');
 const { applyCustomerPricesToProducts, isFixedPriceRateType } = require('../../services/customerPricing.service');
 const { applyAdminProductsCatalogFilter } = require('../../utils/productVisibility');
 
-/** Fixed: unchanged (pricing filter later). Daily/Weekly: same filter as admin Products sidebar. */
+/** Daily/Weekly: identical to admin Products sidebar (isContractOnly === false only). Fixed unchanged. */
 const applyCatalogVisibilityFilter = async (where, userId) => {
   if (!userId) {
     applyAdminProductsCatalogFilter(where);

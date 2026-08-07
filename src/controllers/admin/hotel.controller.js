@@ -18,6 +18,93 @@ const {
   toEndOfDay,
 } = require('../../services/customerPricing.service');
 
+/** Fast replace of Fixed Price rows + mark Excel (no-image) SKUs as contract-only */
+async function replaceCustomerFixedPricing(customerId, pricingRows, startDate, endDate) {
+  if (!Array.isArray(pricingRows) || pricingRows.length === 0) {
+    throw new Error('At least one product pricing row is required');
+  }
+
+  const normalized = [];
+  for (const pricing of pricingRows) {
+    const productId = Number(pricing.productId);
+    const fixedPrice = Number(pricing.fixedPrice);
+    if (!productId || Number.isNaN(productId) || !fixedPrice || fixedPrice <= 0 || Number.isNaN(fixedPrice)) {
+      throw new Error('Invalid product pricing data');
+    }
+    normalized.push({ productId, fixedPrice });
+  }
+
+  const productIds = normalized.map((p) => p.productId);
+
+  // Deactivate all existing rows for this customer
+  await CustomerProductPricing.updateMany(
+    { customerId },
+    { $set: { isActive: false } }
+  );
+
+  const existingRows = await CustomerProductPricing.find({
+    customerId,
+    productId: { $in: productIds },
+  }).select('productId');
+  const existingIds = new Set(existingRows.map((r) => Number(r.productId)));
+
+  const toUpdate = normalized.filter((p) => existingIds.has(p.productId));
+  const toCreate = normalized.filter((p) => !existingIds.has(p.productId));
+
+  if (toUpdate.length > 0) {
+    await CustomerProductPricing.bulkWrite(
+      toUpdate.map((p) => ({
+        updateOne: {
+          filter: { customerId, productId: p.productId },
+          update: {
+            $set: {
+              fixedPrice: p.fixedPrice,
+              contractStartDate: startDate,
+              contractEndDate: endDate,
+              isActive: true,
+            },
+          },
+        },
+      })),
+      { ordered: false }
+    );
+  }
+
+  // Create missing rows in parallel chunks (preserves auto-increment id hooks)
+  const chunkSize = 25;
+  for (let i = 0; i < toCreate.length; i += chunkSize) {
+    const chunk = toCreate.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map((p) =>
+        CustomerProductPricing.create({
+          customerId,
+          productId: p.productId,
+          fixedPrice: p.fixedPrice,
+          contractStartDate: startDate,
+          contractEndDate: endDate,
+          isActive: true,
+        })
+      )
+    );
+  }
+
+  // Excel SKUs (no images) → contract-only so Daily/Weekly + Products sidebar hide them
+  await Product.updateMany(
+    {
+      id: { $in: productIds },
+      $or: [
+        { images: { $exists: false } },
+        { images: null },
+        { images: { $size: 0 } },
+        { images: [] },
+      ],
+    },
+    { $set: { isContractOnly: true } }
+  );
+
+  return productIds.length;
+}
+
 const createHotel = async (request, reply) => {
   try {
     const {
@@ -107,20 +194,16 @@ const createHotel = async (request, reply) => {
       }
 
       try {
-        for (const pricing of customerProductPricing) {
-          await CustomerProductPricing.create({
-            customerId: user.id,
-            productId: pricing.productId,
-            fixedPrice: pricing.fixedPrice,
-            contractStartDate: startDate,
-            contractEndDate: endDate,
-            isActive: true,
-          });
-        }
+        await replaceCustomerFixedPricing(
+          user.id,
+          customerProductPricing,
+          startDate,
+          endDate
+        );
       } catch (pricingError) {
         logger.error('Error creating customer product pricing:', pricingError);
         await user.destroy().catch(() => {});
-        return sendError(reply, 'Failed to save customer product pricing', 500);
+        return sendError(reply, pricingError.message || 'Failed to save customer product pricing', 500);
       }
     }
 
@@ -339,48 +422,24 @@ const updateHotel = async (request, reply) => {
         }
       }
 
-      await CustomerProductPricing.update(
-        { isActive: false },
-        { where: { customerId: hotelId } }
-      );
-
-      for (const pricing of body.customerProductPricing) {
-        if (!pricing.productId || !pricing.fixedPrice || pricing.fixedPrice <= 0) {
-          return sendError(reply, 'Invalid product pricing data', 400);
-        }
-      }
-
-      for (const pricing of body.customerProductPricing) {
-        const productId = Number(pricing.productId);
-        const existing = await CustomerProductPricing.findOne({
-          where: { customerId: hotelId, productId },
-        });
-
-        if (existing) {
-          await existing.update({
-            fixedPrice: pricing.fixedPrice,
-            contractStartDate: startDate,
-            contractEndDate: endDate,
-            isActive: true,
-          });
-        } else {
-          await CustomerProductPricing.create({
-            customerId: hotelId,
-            productId,
-            fixedPrice: pricing.fixedPrice,
-            contractStartDate: startDate,
-            contractEndDate: endDate,
-            isActive: true,
-          });
-        }
+      try {
+        const count = await replaceCustomerFixedPricing(
+          hotelId,
+          body.customerProductPricing,
+          startDate,
+          endDate
+        );
+        logger.info(`Hotel ${hotelId}: saved ${count} fixed-price product row(s)`);
+      } catch (pricingError) {
+        return sendError(reply, pricingError.message || 'Invalid product pricing data', 400);
       }
 
       userUpdate.pricePerUnit = null;
     } else if (nextRateType && nextRateType !== 'Fixed Price') {
       // Leaving Fixed Price → deactivate contract pricing so Daily/Weekly use catalog only
-      await CustomerProductPricing.update(
-        { isActive: false },
-        { where: { customerId: hotelId } }
+      await CustomerProductPricing.updateMany(
+        { customerId: hotelId },
+        { $set: { isActive: false } }
       );
       userUpdate.pricePerUnit = body.pricePerUnit != null ? Number(body.pricePerUnit) : hotel.pricePerUnit;
     }

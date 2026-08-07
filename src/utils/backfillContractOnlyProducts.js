@@ -1,8 +1,6 @@
 /**
- * Normalize product visibility for catalog vs Fixed-Price Excel contracts.
- *
- * Catalog (admin Products sidebar + Daily/Weekly app): isContractOnly === false
- * Contract (Fixed Excel / customer pricing): isContractOnly === true
+ * Mark Fixed Excel / contract products so Daily/Weekly + admin Products sidebar
+ * only show true catalog rows (isContractOnly === false).
  */
 const Product = require('../models/product.model');
 const CustomerProductPricing = require('../models/customer.product.pricing.model');
@@ -22,7 +20,6 @@ const hasNoImages = (product) => {
 
 const backfillContractOnlyProducts = async () => {
   try {
-    // 1) Explicit default: missing flag → catalog (false)
     const defaults = await Product.updateMany(
       { isContractOnly: { $exists: false } },
       { $set: { isContractOnly: false } }
@@ -36,7 +33,7 @@ const backfillContractOnlyProducts = async () => {
     const pricingRows = await CustomerProductPricing.findAll({
       attributes: ['productId'],
     });
-    const pricingIds = [
+    const productIds = [
       ...new Set(
         pricingRows
           .map((row) => Number(row.productId))
@@ -44,11 +41,10 @@ const backfillContractOnlyProducts = async () => {
       ),
     ];
 
-    // 2) Pricing-linked Excel-style rows (no images) → contract-only
-    if (pricingIds.length > 0) {
+    if (productIds.length > 0) {
       const priced = await Product.updateMany(
         {
-          id: { $in: pricingIds },
+          id: { $in: productIds },
           isContractOnly: { $ne: true },
           $or: [
             { images: { $exists: false } },
@@ -66,7 +62,6 @@ const backfillContractOnlyProducts = async () => {
       }
     }
 
-    // 3) Duplicate names: keep one catalog row, mark extra Excel copies contract-only
     const allProducts = await Product.findAll({
       attributes: ['id', 'name', 'images', 'isContractOnly'],
     });
@@ -80,15 +75,14 @@ const backfillContractOnlyProducts = async () => {
     }
 
     const duplicateContractIds = [];
+    const pricingSet = new Set(productIds);
     for (const group of groups.values()) {
       if (group.length < 2) continue;
 
-      const pricingSet = new Set(pricingIds);
       const inPricing = group.filter((p) => pricingSet.has(Number(p.id)));
       const notInPricing = group.filter((p) => !pricingSet.has(Number(p.id)));
 
       if (inPricing.length > 0 && notInPricing.length > 0) {
-        // Catalog row exists separately from pricing-linked copies
         for (const p of inPricing) {
           if (p.isContractOnly !== true && hasNoImages(p)) {
             duplicateContractIds.push(Number(p.id));
@@ -97,8 +91,6 @@ const backfillContractOnlyProducts = async () => {
         continue;
       }
 
-      // All duplicates are pricing-linked (or none are): keep lowest id as catalog if it has
-      // images; otherwise mark every no-image duplicate except the oldest as contract-only.
       const sorted = [...group].sort((a, b) => Number(a.id) - Number(b.id));
       const keep = sorted.find((p) => !hasNoImages(p)) || sorted[0];
       for (const p of sorted) {
