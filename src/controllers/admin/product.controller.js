@@ -209,6 +209,15 @@ const createProduct = async (request, reply) => {
 
     Object.assign(productData, validatedProductData);
 
+    // Contract Excel uploads can pass ?contractOnly=1 (avoids body field rejected by older validators)
+    const contractOnlyQuery =
+      request.query?.contractOnly === '1' ||
+      request.query?.contractOnly === 'true' ||
+      request.query?.isContractOnly === 'true';
+    if (contractOnlyQuery) {
+      productData.isContractOnly = true;
+    }
+
     // Verify category exists - ensure categoryId is a valid integer
     const categoryId = parseInt(validatedProductData.category, 10);
     if (isNaN(categoryId)) {

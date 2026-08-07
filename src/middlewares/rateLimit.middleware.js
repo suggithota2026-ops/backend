@@ -39,16 +39,23 @@ const rateLimit = async (request, reply) => {
     return;
   }
 
-  // Prefer authenticated user key so shared NAT IPs don't block the whole office
+  // Admin authenticated APIs (Excel bulk product create, etc.) — use a higher budget
   const authHeader = request.headers?.authorization || '';
-  const userKey =
-    typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-      ? `user:${authHeader.slice(0, 32)}`
-      : `ip:${request.ip}`;
+  const hasBearer =
+    typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+  const isAdminApi = path.startsWith('/api/admin/');
+
+  // Prefer authenticated user key so shared NAT IPs don't block the whole office
+  const userKey = hasBearer
+    ? `user:${authHeader.slice(0, 48)}`
+    : `ip:${request.ip}`;
 
   const now = Date.now();
   const windowMs = Math.max(1, Number(RATE_LIMIT_WINDOW) || 15) * 60 * 1000;
-  const maxRequests = Math.max(50, Number(RATE_LIMIT_MAX) || 500);
+  // Excel fixed-price upload can create many products; give admins more headroom
+  const maxRequests = isAdminApi && hasBearer
+    ? Math.max(2000, Number(RATE_LIMIT_MAX) || 500)
+    : Math.max(50, Number(RATE_LIMIT_MAX) || 500);
 
   if (!requestCounts.has(userKey)) {
     requestCounts.set(userKey, { count: 1, resetTime: now + windowMs });
