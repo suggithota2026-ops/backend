@@ -49,6 +49,31 @@ const backfillProductSources = async () => {
       attributes: ['customerId', 'productId'],
     });
 
+    const pricedProductIds = [
+      ...new Set(
+        pricingRows
+          .map((row) => Number(row.productId))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      ),
+    ];
+
+    if (pricedProductIds.length > 0) {
+      const markPriced = await Product.updateMany(
+        { id: { $in: pricedProductIds } },
+        {
+          $set: {
+            productSource: PRODUCT_SOURCE.CUSTOMER_FIXED,
+            isContractOnly: true,
+          },
+        }
+      );
+      if (markPriced?.modifiedCount > 0) {
+        logger.info(
+          `Marked ${markPriced.modifiedCount} pricing-linked product(s) as customer_fixed`
+        );
+      }
+    }
+
     const productToCustomers = new Map();
     for (const row of pricingRows) {
       const pid = Number(row.productId);
@@ -63,10 +88,7 @@ const backfillProductSources = async () => {
       if (customerSet.size !== 1) continue;
       const [customerId] = [...customerSet];
       const result = await Product.updateMany(
-        {
-          id: productId,
-          $or: [{ ownerCustomerId: null }, { ownerCustomerId: { $exists: false } }],
-        },
+        { id: productId },
         {
           $set: {
             productSource: PRODUCT_SOURCE.CUSTOMER_FIXED,
@@ -79,6 +101,24 @@ const backfillProductSources = async () => {
     }
     if (assigned > 0) {
       logger.info(`Assigned ownerCustomerId on ${assigned} customer-fixed product(s)`);
+    }
+
+    const ownedFixed = await Product.updateMany(
+      {
+        ownerCustomerId: { $ne: null, $exists: true },
+        productSource: { $ne: PRODUCT_SOURCE.CATALOG },
+      },
+      {
+        $set: {
+          productSource: PRODUCT_SOURCE.CUSTOMER_FIXED,
+          isContractOnly: true,
+        },
+      }
+    );
+    if (ownedFixed?.modifiedCount > 0) {
+      logger.info(
+        `Marked ${ownedFixed.modifiedCount} owner-linked product(s) as customer_fixed`
+      );
     }
 
     const unsetCatalog = await Product.updateMany(

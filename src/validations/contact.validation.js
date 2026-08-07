@@ -31,9 +31,15 @@ const sendMessageSchema = Joi.object({
   city: Joi.string().trim().max(100).optional().allow('', null),
   pinCode: Joi.string().trim().max(20).optional().allow('', null),
   landmark: Joi.string().trim().max(200).optional().allow('', null),
-  email: Joi.string().trim().email().optional().allow('', null).messages({
-    'string.email': 'Please enter a valid email address',
-  }),
+  email: Joi.string()
+    .trim()
+    .optional()
+    .allow('', null)
+    .custom((value) => {
+      if (value == null || value === '') return null;
+      const { error } = Joi.string().email().validate(value);
+      return error ? null : value;
+    }),
   message: Joi.string().trim().max(1000).optional().allow('', null),
   latitude: Joi.number().optional().allow(null),
   longitude: Joi.number().optional().allow(null),
@@ -48,7 +54,15 @@ const updateContactMessageSchema = Joi.object({
   city: Joi.string().trim().max(100).optional().allow('', null),
   pinCode: Joi.string().trim().max(20).optional().allow('', null),
   landmark: Joi.string().trim().max(200).optional().allow('', null),
-  email: Joi.string().trim().email().optional().allow('', null),
+  email: Joi.string()
+    .trim()
+    .optional()
+    .allow('', null)
+    .custom((value) => {
+      if (value == null || value === '') return null;
+      const { error } = Joi.string().email().validate(value);
+      return error ? null : value;
+    }),
   message: Joi.string().trim().max(1000).optional().allow('', null),
 }).unknown(true);
 

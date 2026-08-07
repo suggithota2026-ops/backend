@@ -20,6 +20,15 @@ const buildEnquiryAddress = (message) => {
   return parts.filter(Boolean).join(', ');
 };
 
+const sanitizeEnquiryEmail = (value) => {
+  if (value == null || value === '') return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) ? trimmed : null;
+};
+
+const defaultEnquiryMessage = () => 'Registration submitted from mobile app';
+
 async function syncHotelFromEnquiry(message) {
   const normalizedContact = normalizeMobileNumber(message.contactNumber);
   if (normalizedContact.length !== 10) return null;
@@ -54,12 +63,12 @@ async function provisionCustomerFromEnquiry(message) {
     return Number.isFinite(n) ? n : null;
   };
 
-  if (!hotel) {
-    const fullAddress = buildEnquiryAddress(message);
-    const hotelName =
-      (message.hotelName && String(message.hotelName).trim()) ||
-      `Customer ${normalizedContact}`;
+  const fullAddress = buildEnquiryAddress(message);
+  const hotelName =
+    (message.hotelName && String(message.hotelName).trim()) ||
+    `Customer ${normalizedContact}`;
 
+  if (!hotel) {
     try {
       hotel = await User.create({
         mobileNumber: normalizedContact,
@@ -69,6 +78,7 @@ async function provisionCustomerFromEnquiry(message) {
         pinCode: message.pinCode || null,
         latitude: safeNumber(message.latitude),
         longitude: safeNumber(message.longitude),
+        email: sanitizeEnquiryEmail(message.email),
         isVerified: true,
         role: ROLES.HOTEL,
         creditLimit: 0,
@@ -78,7 +88,6 @@ async function provisionCustomerFromEnquiry(message) {
       });
       created = true;
     } catch (createError) {
-      // Race / duplicate mobile — link existing customer instead of failing resolve
       const existing = await User.findOne({ where: userMobileWhere(normalizedContact) });
       if (existing) {
         hotel = existing;
@@ -90,9 +99,30 @@ async function provisionCustomerFromEnquiry(message) {
         );
       }
     }
-  } else if (hotel.mobileNumber !== normalizedContact) {
-    hotel.mobileNumber = normalizedContact;
-    await hotel.save();
+  }
+
+  if (hotel) {
+    await hotel.update({
+      hotelName: hotelName || hotel.hotelName,
+      address: fullAddress || hotel.address,
+      city: message.city || hotel.city,
+      pinCode: message.pinCode || hotel.pinCode,
+      latitude: safeNumber(message.latitude) ?? hotel.latitude,
+      longitude: safeNumber(message.longitude) ?? hotel.longitude,
+      email: sanitizeEnquiryEmail(message.email) ?? hotel.email,
+      isVerified: true,
+      role: ROLES.HOTEL,
+      isBlocked: false,
+    });
+    if (hotel.mobileNumber !== normalizedContact) {
+      hotel.mobileNumber = normalizedContact;
+      await hotel.save();
+    }
+    await hotel.reload();
+  }
+
+  if (!hotel) {
+    throw new Error('Failed to create or link customer account from enquiry');
   }
 
   return { hotel, created, normalizedContact };
@@ -284,8 +314,13 @@ const updateContactMessage = async (request, reply) => {
     if (city !== undefined) updateData.city = city ? String(city).trim() : null;
     if (pinCode !== undefined) updateData.pinCode = pinCode ? String(pinCode).trim() : null;
     if (landmark !== undefined) updateData.landmark = landmark ? String(landmark).trim() : null;
-    if (email !== undefined) updateData.email = email ? String(email).trim() : null;
-    if (message !== undefined) updateData.message = message ? String(message).trim() : null;
+    if (email !== undefined) updateData.email = sanitizeEnquiryEmail(email);
+    if (message !== undefined) {
+      updateData.message =
+        message && String(message).trim()
+          ? String(message).trim()
+          : defaultEnquiryMessage();
+    }
 
     if (rawContactNumber !== undefined) {
       const normalized = String(rawContactNumber || '').replace(/\D/g, '').slice(-10);
@@ -303,7 +338,6 @@ const updateContactMessage = async (request, reply) => {
 
     let hotel = null;
     if (status === 'resolved') {
-      // Create/link customer BEFORE marking enquiry resolved (avoids resolved-without-customer on live)
       try {
         const provisioned = await provisionCustomerFromEnquiry(contactMessage);
         hotel = provisioned.hotel;
@@ -323,6 +357,14 @@ const updateContactMessage = async (request, reply) => {
             'Enquiry could not be resolved because customer account creation failed. Please check mobile number and try again.',
           500
         );
+      }
+    } else if (contactMessage.status === 'resolved') {
+      // Resolved enquiry edited — ensure customer still exists (live recovery path)
+      try {
+        const provisioned = await provisionCustomerFromEnquiry(contactMessage);
+        hotel = provisioned.hotel;
+      } catch (provisionError) {
+        logger.warn(`Resolved enquiry ${id} missing customer link: ${provisionError.message}`);
       }
     } else if (
       hotelName !== undefined ||
@@ -434,7 +476,7 @@ const acceptEnquiry = async (request, reply) => {
     );
   } catch (error) {
     logger.error('Error accepting enquiry:', error);
-    return sendError(reply, 'Failed to accept enquiry', 500);
+    return sendError(reply, error.message || 'Failed to accept enquiry', 500);
   }
 };
 

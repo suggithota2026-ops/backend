@@ -10,21 +10,26 @@ const PRODUCT_SOURCE = {
   CUSTOMER_FIXED: 'customer_fixed',
 };
 
-/** Admin Products sidebar + Daily/Weekly mobile catalog — never customer_fixed SKUs */
+/** Product Master sidebar + Daily/Weekly — never customer-fixed SKUs */
 const catalogOnlyWhere = () => ({
   $and: [
     { productSource: { $ne: PRODUCT_SOURCE.CUSTOMER_FIXED } },
     {
-      $or: [
-        { isContractOnly: { $ne: true } },
-        { isContractOnly: { $exists: false } },
-      ],
+      $or: [{ ownerCustomerId: null }, { ownerCustomerId: { $exists: false } }],
+    },
+    {
+      $or: [{ isContractOnly: { $ne: true } }, { isContractOnly: { $exists: false } }],
     },
   ],
 });
 
 const applyAdminProductsCatalogFilter = (where = {}) => {
-  Object.assign(where, catalogOnlyWhere());
+  const catalogFilter = catalogOnlyWhere();
+  if (where.$and) {
+    where.$and = [...where.$and, ...catalogFilter.$and];
+  } else {
+    Object.assign(where, catalogFilter);
+  }
   return where;
 };
 
@@ -36,15 +41,16 @@ const customerFixedWhere = (customerId) => ({
 
 const isCatalogProduct = (product) => {
   if (!product || typeof product !== 'object') return false;
-  if (product.productSource === PRODUCT_SOURCE.CATALOG) return true;
   if (product.productSource === PRODUCT_SOURCE.CUSTOMER_FIXED) return false;
-  // Legacy rows before backfill
+  if (product.ownerCustomerId != null && product.ownerCustomerId !== '') return false;
+  if (product.productSource === PRODUCT_SOURCE.CATALOG) return true;
   return product.isContractOnly !== true;
 };
 
 const isCustomerFixedProduct = (product) => {
   if (!product || typeof product !== 'object') return false;
   if (product.productSource === PRODUCT_SOURCE.CUSTOMER_FIXED) return true;
+  if (product.ownerCustomerId != null && product.ownerCustomerId !== '') return true;
   if (product.productSource === PRODUCT_SOURCE.CATALOG) return false;
   return product.isContractOnly === true;
 };
