@@ -5,19 +5,33 @@ const Category = require('../../models/category.model');
 const User = require('../../models/user.model');
 const { sendSuccess, sendError } = require('../../utils/response');
 const logger = require('../../utils/logger');
-const { applyCustomerPricesToProducts, isFixedPriceRateType } = require('../../services/customerPricing.service');
-const { applyAdminProductsCatalogFilter } = require('../../utils/productVisibility');
+const { applyCustomerPricesToProducts, isFixedPriceRateType, getActiveCustomerPricingMap } = require('../../services/customerPricing.service');
+const { applyAdminProductsCatalogFilter, PRODUCT_SOURCE } = require('../../utils/productVisibility');
 
-/** Daily/Weekly: identical to admin Products sidebar (isContractOnly === false only). Fixed unchanged. */
+const setProductApiNoCacheHeaders = (reply) => {
+  reply.header('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+  reply.header('Pragma', 'no-cache');
+  reply.header('Expires', '0');
+};
+
+/** Daily/Weekly: Product Master only. Fixed Price: active contract product IDs only. */
 const applyCatalogVisibilityFilter = async (where, userId) => {
   if (!userId) {
     applyAdminProductsCatalogFilter(where);
     return where;
   }
   const user = await User.findByPk(Number(userId));
-  if (!user || !isFixedPriceRateType(user.rateType)) {
-    applyAdminProductsCatalogFilter(where);
+  if (user && isFixedPriceRateType(user.rateType)) {
+    const priceMap = await getActiveCustomerPricingMap(user.id);
+    const productIds = [...priceMap.keys()];
+    if (productIds.length === 0) {
+      where.id = -1;
+    } else {
+      where.id = { [Op.in]: productIds };
+    }
+    return where;
   }
+  applyAdminProductsCatalogFilter(where);
   return where;
 };
 
@@ -127,6 +141,7 @@ const getCategories = async (request, reply) => {
 
 const getProducts = async (request, reply) => {
   try {
+    setProductApiNoCacheHeaders(reply);
     const { category, subcategory, search } = request.query;
 
     const where = {
@@ -213,6 +228,7 @@ const getProducts = async (request, reply) => {
 
 const getProduct = async (request, reply) => {
   try {
+    setProductApiNoCacheHeaders(reply);
     const { id } = request.params;
     const categoryId = parseInt(id);
 
@@ -287,6 +303,7 @@ const getProduct = async (request, reply) => {
 
 const getProductsBySubcategory = async (request, reply) => {
   try {
+    setProductApiNoCacheHeaders(reply);
     const { subcategoryId } = request.params;
 
     if (!subcategoryId) {
@@ -362,6 +379,7 @@ const getProductsBySubcategory = async (request, reply) => {
 
 const getProductById = async (request, reply) => {
   try {
+    setProductApiNoCacheHeaders(reply);
     const { id } = request.params;
     const productId = parseInt(id);
 
@@ -400,8 +418,8 @@ const getProductById = async (request, reply) => {
       if (user && isFixedPriceRateType(user.rateType)) {
         return sendError(reply, 'This product is not in your fixed-rate contract', 404);
       }
-      // Daily/Weekly: hide Fixed Excel / contract-only SKUs
-      if (productData.isContractOnly !== false) {
+      // Daily/Weekly: hide customer_fixed SKUs
+      if (!isCatalogProduct(productData)) {
         return sendError(reply, 'Product not found', 404);
       }
     } else {
@@ -418,6 +436,7 @@ const getProductById = async (request, reply) => {
 /** Featured / home carousel — same visibility rules as getProducts */
 const getFeaturedProducts = async (request, reply) => {
   try {
+    setProductApiNoCacheHeaders(reply);
     const limit = Math.min(parseInt(request.query.limit, 10) || 12, 50);
     const where = {
       isActive: true,

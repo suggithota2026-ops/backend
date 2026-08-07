@@ -30,27 +30,29 @@ const productRoutes = async (fastify, options) => {
     // Validating request.body here can incorrectly fail with empty body.
   }, createProduct);
 
-  // Bulk Fixed Excel contract products — one request, never shown in Products sidebar
+  // Bulk Customer Fixed Rate products — one request, never shown in Products sidebar
   fastify.post('/products/bulk-contract', {
     schema: {
       tags: ['admin'],
-      summary: 'Bulk create contract-only products (Fixed Price Excel)',
+      summary: 'Bulk create customer fixed-rate products (Fixed Price Excel)',
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
         required: ['products'],
         additionalProperties: true,
         properties: {
+          customerId: { type: ['number', 'null'] },
           products: {
             type: 'array',
-            maxItems: 50,
+            maxItems: 150,
             items: {
               type: 'object',
               additionalProperties: true,
               properties: {
                 name: { type: 'string' },
                 categoryId: { type: 'number' },
-                category: { type: 'number' },
+                category: { type: ['number', 'string'] },
+                categoryName: { type: 'string' },
                 subcategory: { type: 'string' },
                 price: { type: 'number' },
                 unit: { type: 'string' },

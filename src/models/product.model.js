@@ -12,6 +12,15 @@ const ProductSchema = new mongoose.Schema(
     images: { type: [String], default: [] },
     price: { type: Number, required: true },
     pricingType: { type: String, enum: ['fixed', 'daily', 'weekly'], default: 'fixed' },
+    /** catalog = Product Master sidebar; customer_fixed = Fixed Rate Excel per customer */
+    productSource: {
+      type: String,
+      enum: ['catalog', 'customer_fixed'],
+      default: 'catalog',
+      index: true,
+    },
+    /** Set for customer_fixed — isolates Excel SKUs per Fixed Price customer */
+    ownerCustomerId: { type: Number, default: null, index: true },
     isContractOnly: { type: Boolean, default: false },
     unit: { type: String, default: 'kg' },
     stock: { type: Number, default: 0 },

@@ -1,6 +1,10 @@
 const CustomerProductPricing = require('../models/customer.product.pricing.model');
 const User = require('../models/user.model');
 const logger = require('../utils/logger');
+const {
+  isCatalogProduct,
+  PRODUCT_SOURCE,
+} = require('../utils/productVisibility');
 
 const isFixedPriceRateType = (rateType) =>
   String(rateType || '').trim().toLowerCase() === 'fixed price';
@@ -97,7 +101,7 @@ const getActiveCustomerPricingMap = async (customerId) => {
  * For Fixed Price customers:
  * - Only products with an active fixed price are returned
  * - product.price is the contract fixedPrice (not daily catalog rate)
- * Daily / Weekly: same catalog as admin Products sidebar (isContractOnly === false).
+ * Daily / Weekly: Product Master catalog only (productSource === catalog).
  */
 const applyCustomerPricesToProducts = async (products, userId) => {
   if (!userId || !Array.isArray(products) || products.length === 0) {
@@ -107,9 +111,8 @@ const applyCustomerPricesToProducts = async (products, userId) => {
   try {
     const user = await User.findByPk(Number(userId));
     if (!user || !isFixedPriceRateType(user.rateType)) {
-      // Daily / Weekly — identical to admin Products sidebar filter
       return products.filter(
-        (product) => product && typeof product === 'object' && product.isContractOnly === false
+        (product) => product && typeof product === 'object' && isCatalogProduct(product)
       );
     }
 
@@ -122,6 +125,14 @@ const applyCustomerPricesToProducts = async (products, userId) => {
       .map((product) => {
         const data = product && typeof product === 'object' ? { ...product } : product;
         if (!data || data.id == null) return null;
+
+        if (
+          data.productSource === PRODUCT_SOURCE.CUSTOMER_FIXED &&
+          data.ownerCustomerId != null &&
+          Number(data.ownerCustomerId) !== Number(user.id)
+        ) {
+          return null;
+        }
 
         const fixedPrice = priceMap.get(Number(data.id));
         if (fixedPrice == null || Number.isNaN(fixedPrice)) {
@@ -147,7 +158,7 @@ const applyCustomerPricesToProducts = async (products, userId) => {
       // ignore
     }
     return products.filter(
-      (product) => product && typeof product === 'object' && product.isContractOnly === false
+      (product) => product && typeof product === 'object' && isCatalogProduct(product)
     );
   }
 };

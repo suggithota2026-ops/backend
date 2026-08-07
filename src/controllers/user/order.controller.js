@@ -8,6 +8,7 @@ const { ORDER_STATUS } = require('../../config/constants');
 const { sendAdminOrderNotification } = require('../../services/notification.service');
 const logger = require('../../utils/logger');
 const { getActiveCustomerPricing, isFixedPriceRateType } = require('../../services/customerPricing.service');
+const { isCatalogProduct } = require('../../utils/productVisibility');
 
 async function buildOrderItems(items, hotelId) {
   const user = await User.findByPk(hotelId);
@@ -36,7 +37,7 @@ async function buildOrderItems(items, hotelId) {
       return { error: `Product ${product.name} is currently out of stock`, statusCode: 400 };
     }
 
-    if (!isFixedPriceRateType(user.rateType) && product.isContractOnly !== false) {
+    if (!isFixedPriceRateType(user.rateType) && !isCatalogProduct(product)) {
       return { error: `Product ${product.name} is not available`, statusCode: 400 };
     }
 

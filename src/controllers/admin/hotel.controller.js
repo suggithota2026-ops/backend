@@ -12,13 +12,14 @@ const {
   normalizeMobileNumber,
   userMobileWhere,
 } = require('../../utils/userMobile');
+const { assignCustomerOwnership } = require('../../services/customerFixedProduct.service');
+const { toStartOfDay, toEndOfDay, isFixedPriceRateType } = require('../../services/customerPricing.service');
 const {
-  getActiveCustomerPricing,
-  toStartOfDay,
-  toEndOfDay,
-} = require('../../services/customerPricing.service');
+  handleCustomerRateTypeTransition,
+} = require('../../services/rateTypeTransition.service');
+const { PRODUCT_SOURCE } = require('../../utils/productVisibility');
 
-/** Fast replace of Fixed Price rows + mark Excel (no-image) SKUs as contract-only */
+/** Replace Fixed Price rows; assign customer ownership on customer_fixed SKUs */
 async function replaceCustomerFixedPricing(customerId, pricingRows, startDate, endDate) {
   if (!Array.isArray(pricingRows) || pricingRows.length === 0) {
     throw new Error('At least one product pricing row is required');
@@ -36,10 +37,32 @@ async function replaceCustomerFixedPricing(customerId, pricingRows, startDate, e
 
   const productIds = normalized.map((p) => p.productId);
 
+  const linkedProducts = await Product.findAll({
+    where: { id: { [Op.in]: productIds } },
+    attributes: ['id', 'productSource', 'ownerCustomerId', 'name'],
+  });
+  const productById = new Map(linkedProducts.map((p) => [Number(p.id), p]));
+
+  for (const { productId } of normalized) {
+    const product = productById.get(productId);
+    if (!product) {
+      throw new Error(`Product ${productId} not found`);
+    }
+    if (
+      product.productSource === PRODUCT_SOURCE.CUSTOMER_FIXED &&
+      product.ownerCustomerId != null &&
+      Number(product.ownerCustomerId) !== Number(customerId)
+    ) {
+      throw new Error(`Product "${product.name}" belongs to another customer`);
+    }
+  }
+
+  await assignCustomerOwnership(customerId, productIds);
+
   // Deactivate all existing rows for this customer
-  await CustomerProductPricing.updateMany(
-    { customerId },
-    { $set: { isActive: false } }
+  await CustomerProductPricing.update(
+    { isActive: false },
+    { where: { customerId } }
   );
 
   const existingRows = await CustomerProductPricing.find({
@@ -70,7 +93,6 @@ async function replaceCustomerFixedPricing(customerId, pricingRows, startDate, e
     );
   }
 
-  // Create missing rows in parallel chunks (preserves auto-increment id hooks)
   const chunkSize = 25;
   for (let i = 0; i < toCreate.length; i += chunkSize) {
     const chunk = toCreate.slice(i, i + chunkSize);
@@ -87,20 +109,6 @@ async function replaceCustomerFixedPricing(customerId, pricingRows, startDate, e
       )
     );
   }
-
-  // Excel SKUs (no images) → contract-only so Daily/Weekly + Products sidebar hide them
-  await Product.updateMany(
-    {
-      id: { $in: productIds },
-      $or: [
-        { images: { $exists: false } },
-        { images: null },
-        { images: { $size: 0 } },
-        { images: [] },
-      ],
-    },
-    { $set: { isContractOnly: true } }
-  );
 
   return productIds.length;
 }
@@ -306,16 +314,19 @@ const getHotel = async (request, reply) => {
       return sendError(reply, 'Hotel not found', 404);
     }
 
-    // Get all active customer product pricing (admin edit needs full list)
-    const customerProductPricing = await CustomerProductPricing.findAll({
-      where: { 
-        customerId: Number(id),
-        isActive: true,
-      },
-      attributes: ['id', 'productId', 'fixedPrice', 'contractStartDate', 'contractEndDate', 'isActive'],
-    });
+    // Fixed Price only — Daily/Weekly must not receive stale contract rows
+    let pricingJson = [];
+    if (hotel.rateType === 'Fixed Price') {
+      const customerProductPricing = await CustomerProductPricing.findAll({
+        where: {
+          customerId: Number(id),
+          isActive: true,
+        },
+        attributes: ['id', 'productId', 'fixedPrice', 'contractStartDate', 'contractEndDate', 'isActive'],
+      });
+      pricingJson = customerProductPricing.map((pricing) => pricing.toJSON());
+    }
 
-    const pricingJson = customerProductPricing.map((pricing) => pricing.toJSON());
     const productIds = [
       ...new Set(pricingJson.map((p) => Number(p.productId)).filter((pid) => !Number.isNaN(pid))),
     ];
@@ -406,6 +417,11 @@ const updateHotel = async (request, reply) => {
     if (body.isBlocked !== undefined) userUpdate.isBlocked = body.isBlocked === true;
     if (body.rateType !== undefined) userUpdate.rateType = nextRateType;
 
+    const previousRateType = hotel.rateType;
+    if (body.rateType !== undefined && String(previousRateType || '') !== String(nextRateType || '')) {
+      await handleCustomerRateTypeTransition(hotelId, previousRateType, nextRateType);
+    }
+
     if (nextRateType === 'Fixed Price' && Array.isArray(body.customerProductPricing)) {
       let startDate = toStartOfDay(body.contractStartDate);
       let endDate = toEndOfDay(body.contractEndDate);
@@ -435,12 +451,7 @@ const updateHotel = async (request, reply) => {
       }
 
       userUpdate.pricePerUnit = null;
-    } else if (nextRateType && nextRateType !== 'Fixed Price') {
-      // Leaving Fixed Price → deactivate contract pricing so Daily/Weekly use catalog only
-      await CustomerProductPricing.updateMany(
-        { customerId: hotelId },
-        { $set: { isActive: false } }
-      );
+    } else if (nextRateType && !isFixedPriceRateType(nextRateType)) {
       userUpdate.pricePerUnit = body.pricePerUnit != null ? Number(body.pricePerUnit) : hotel.pricePerUnit;
     }
 
@@ -535,7 +546,6 @@ const deleteHotel = async (request, reply) => {
   }
 };
 
-// Re-export for backward compatibility
 module.exports = {
   createHotel,
   getHotels,
@@ -543,5 +553,4 @@ module.exports = {
   updateHotel,
   blockHotel,
   deleteHotel,
-  getActiveCustomerPricing,
 };
