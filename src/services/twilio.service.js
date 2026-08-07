@@ -26,6 +26,28 @@ function isTwilioConfigured() {
   );
 }
 
+function toFriendlySmsError(error) {
+  const twilioMsg = String(error?.message || '');
+  if (
+    /daily messages limit/i.test(twilioMsg) ||
+    /exceeded the .* limit/i.test(twilioMsg) ||
+    error?.code === 63038 ||
+    error?.status === 429
+  ) {
+    const friendly = new Error(
+      'SMS daily limit reached. Please try again tomorrow or contact support.'
+    );
+    friendly.statusCode = 429;
+    friendly.code = 'SMS_DAILY_LIMIT';
+    return friendly;
+  }
+
+  const friendly = new Error('Failed to send SMS. Please try again later.');
+  friendly.statusCode = 502;
+  friendly.code = 'SMS_SEND_FAILED';
+  return friendly;
+}
+
 /**
  * Send an SMS. In development without Twilio env, logs and returns without sending.
  * @throws {Error} In production when Twilio is not configured or the API fails.
@@ -47,13 +69,18 @@ async function sendSms(mobileNumber, body) {
   }
 
   const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-  await client.messages.create({
-    body,
-    from: TWILIO_PHONE_NUMBER,
-    to,
-  });
-  logger.info(`Twilio SMS sent to ${to}`);
-  return { sent: true };
+  try {
+    await client.messages.create({
+      body,
+      from: TWILIO_PHONE_NUMBER,
+      to,
+    });
+    logger.info(`Twilio SMS sent to ${to}`);
+    return { sent: true };
+  } catch (error) {
+    logger.error('Twilio SMS failed:', error?.message || error);
+    throw toFriendlySmsError(error);
+  }
 }
 
 module.exports = {

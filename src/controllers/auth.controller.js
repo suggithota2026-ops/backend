@@ -78,8 +78,24 @@ const sendOTP = async (request, reply) => {
     user.otpExpiresAt = otpData.expiresAt;
     await user.save();
 
-    // Send OTP (in production, integrate with SMS service)
-    await sendOTPService(mobileNumber, otpData.code);
+    // Send OTP via SMS — if Twilio daily quota is hit, still allow login with OTP in response
+    let smsWarning = null;
+    try {
+      await sendOTPService(mobileNumber, otpData.code);
+    } catch (smsError) {
+      if (smsError?.code === 'SMS_DAILY_LIMIT') {
+        smsWarning =
+          'SMS daily limit reached. Please try again tomorrow or use the OTP shown below.';
+        logger.warn(`Twilio daily SMS limit hit for ${mobileNumber}`);
+      } else {
+        logger.error('Error sending OTP SMS:', smsError);
+        return sendError(
+          reply,
+          smsError?.message || 'Failed to send OTP. Please try again later.',
+          smsError?.statusCode || 500
+        );
+      }
+    }
 
     // Log OTP to terminal for development/testing
     logger.info(`OTP sent to ${mobileNumber}: ${otpData.code} (expires in ${OTP_EXPIRY_MINUTES} minutes)`);
@@ -89,46 +105,28 @@ const sendOTP = async (request, reply) => {
     console.log(`NODE_ENV: ${NODE_ENV}`);
     console.log(`========================================\n`);
 
-    // Include OTP in response (always include for now, can be restricted in production later)
-    const responseData = {
-      otp: String(otpData.code), // Ensure it's a string
-      expiresAt: otpData.expiresAt.toISOString(),
-      expiresInMinutes: OTP_EXPIRY_MINUTES,
-    };
-
-    // Debug log to verify data
-    console.log('\n=== SENDING RESPONSE ===');
-    console.log('OTP Code:', otpData.code);
-    console.log('Response Data:', JSON.stringify(responseData, null, 2));
-    console.log('Full Response Object:', JSON.stringify({
-      success: true,
-      message: 'OTP sent successfully',
-      data: responseData,
-    }, null, 2));
-    console.log('========================\n');
-
-    // Send response directly to ensure data is included
     const response = {
       success: true,
-      message: 'OTP sent successfully',
+      message: smsWarning || 'OTP sent successfully',
       data: {
         otp: String(otpData.code),
         expiresAt: otpData.expiresAt.toISOString(),
         expiresInMinutes: OTP_EXPIRY_MINUTES,
+        ...(smsWarning ? { smsWarning } : {}),
       },
     };
 
-    logger.info('Sending response with OTP:', JSON.stringify(response, null, 2));
-    console.log('Controller - Final response object:', JSON.stringify(response, null, 2));
-    console.log('Controller - Response data:', response.data);
-
-    // Ensure content type is set
     reply.type('application/json');
-
     return reply.status(200).send(response);
   } catch (error) {
     logger.error('Error sending OTP:', error);
-    return sendError(reply, 'Failed to send OTP', 500);
+    return sendError(
+      reply,
+      error?.message && !/AC[a-f0-9]{32}/i.test(error.message)
+        ? error.message
+        : 'Failed to send OTP. Please try again later.',
+      error?.statusCode || 500
+    );
   }
 };
 

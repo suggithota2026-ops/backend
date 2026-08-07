@@ -30,9 +30,29 @@ exports.sendOtp = async (req, reply) => {
         try {
             await otpService.sendOTP(admin.mobileNumber, code);
         } catch (err) {
-            logger.error('admin sendOtp: SMS failed', { message: err?.message });
+            logger.error('admin sendOtp: SMS failed', { message: err?.message, code: err?.code });
+            if (err?.code === 'SMS_DAILY_LIMIT') {
+                // Keep OTP so admin can still login; do not expose Twilio account details
+                return sendSuccess(
+                    reply,
+                    {
+                        mobileNumber: admin.mobileNumber,
+                        otp: String(code),
+                        smsWarning: true,
+                    },
+                    'SMS daily limit reached. Use the OTP shown to continue login.'
+                );
+            }
             await admin.update({ otpCode: null, otpExpiresAt: null });
-            return sendError(reply, err?.message || 'Failed to send OTP. Check SMS configuration.', 502);
+            return sendError(
+                reply,
+                err?.code === 'SMS_SEND_FAILED'
+                    ? 'Failed to send SMS. Please try again later.'
+                    : (err?.message && !/AC[a-f0-9]{32}/i.test(err.message)
+                        ? err.message
+                        : 'Failed to send OTP. Please try again later.'),
+                err?.statusCode || 502
+            );
         }
 
         return sendSuccess(reply, { mobileNumber: admin.mobileNumber }, 'OTP sent successfully');
@@ -111,9 +131,26 @@ exports.resendOtp = async (req, reply) => {
         try {
             await otpService.sendOTP(admin.mobileNumber, code);
         } catch (err) {
-            logger.error('admin resendOtp: SMS failed', { message: err?.message });
+            logger.error('admin resendOtp: SMS failed', { message: err?.message, code: err?.code });
+            if (err?.code === 'SMS_DAILY_LIMIT') {
+                return sendSuccess(
+                    reply,
+                    {
+                        mobileNumber: admin.mobileNumber,
+                        otp: String(code),
+                        smsWarning: true,
+                    },
+                    'SMS daily limit reached. Use the OTP shown to continue login.'
+                );
+            }
             await admin.update({ otpCode: null, otpExpiresAt: null });
-            return sendError(reply, err?.message || 'Failed to send OTP. Check SMS configuration.', 502);
+            return sendError(
+                reply,
+                err?.message && !/AC[a-f0-9]{32}/i.test(err.message)
+                    ? err.message
+                    : 'Failed to send OTP. Please try again later.',
+                err?.statusCode || 502
+            );
         }
 
         return sendSuccess(reply, { mobileNumber: admin.mobileNumber }, 'OTP resent successfully');
