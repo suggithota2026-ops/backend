@@ -23,11 +23,12 @@ const hotelRoutes = async (fastify, options) => {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['mobileNumber', 'hotelName', 'address'],
+        required: ['mobileNumber', 'hotelName'],
         properties: {
           mobileNumber: { type: 'string' },
           hotelName: { type: 'string' },
           address: { type: 'string' },
+          email: { type: 'string' },
           gstNumber: { type: 'string' },
           creditLimit: { type: 'number' },
           rateType: { type: 'string' },
@@ -108,6 +109,7 @@ const hotelRoutes = async (fastify, options) => {
         properties: {
           hotelName: { type: 'string' },
           address: { type: 'string' },
+          email: { type: 'string' },
           gstNumber: { type: 'string' },
           creditLimit: { type: 'number' },
           isBlocked: { type: 'boolean' },

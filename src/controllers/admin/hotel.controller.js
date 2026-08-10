@@ -119,6 +119,7 @@ const createHotel = async (request, reply) => {
       mobileNumber: rawMobile,
       hotelName,
       address,
+      email,
       gstNumber,
       creditLimit,
       rateType,
@@ -175,7 +176,8 @@ const createHotel = async (request, reply) => {
       mobileNumber,
       hotelName,
       address,
-      gstNumber: gstNumber?.toUpperCase(),
+      email: email ? String(email).trim().toLowerCase() : null,
+      gstNumber: gstNumber ? String(gstNumber).trim().toUpperCase() : null,
       creditLimit: creditLimit || 0,
       rateType,
       pricePerUnit: rateType === 'Fixed Price' ? null : pricePerUnit,
@@ -228,6 +230,7 @@ const createHotel = async (request, reply) => {
         mobileNumber: user.mobileNumber,
         hotelName: user.hotelName,
         address: user.address,
+        email: user.email,
         gstNumber: user.gstNumber,
         creditLimit: user.creditLimit,
         rateType: user.rateType,
@@ -410,8 +413,11 @@ const updateHotel = async (request, reply) => {
     const userUpdate = {};
     if (body.hotelName !== undefined) userUpdate.hotelName = body.hotelName;
     if (body.address !== undefined) userUpdate.address = body.address;
+    if (body.email !== undefined) {
+      userUpdate.email = body.email ? String(body.email).trim().toLowerCase() : null;
+    }
     if (body.gstNumber !== undefined) {
-      userUpdate.gstNumber = body.gstNumber ? String(body.gstNumber).toUpperCase() : null;
+      userUpdate.gstNumber = body.gstNumber ? String(body.gstNumber).trim().toUpperCase() : null;
     }
     if (body.creditLimit !== undefined) userUpdate.creditLimit = Number(body.creditLimit) || 0;
     if (body.isBlocked !== undefined) userUpdate.isBlocked = body.isBlocked === true;
@@ -469,6 +475,7 @@ const updateHotel = async (request, reply) => {
         hotelName: hotel.hotelName,
         mobileNumber: hotel.mobileNumber,
         address: hotel.address,
+        email: hotel.email,
         gstNumber: hotel.gstNumber,
         creditLimit: hotel.creditLimit,
         rateType: hotel.rateType,
