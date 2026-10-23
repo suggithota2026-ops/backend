@@ -28,6 +28,10 @@ module.exports = {
   OTP_EXPIRY_MINUTES: parseInt(process.env.OTP_EXPIRY_MINUTES || '10', 10),
   OTP_LENGTH: parseInt(process.env.OTP_LENGTH || '6', 10),
 
+  // Google Play reviewer test account: fixed OTP, no SMS sent. Set REVIEW_MOBILE_NUMBER= (empty) to disable.
+  REVIEW_MOBILE_NUMBER: process.env.REVIEW_MOBILE_NUMBER ?? '9999999999',
+  REVIEW_OTP: process.env.REVIEW_OTP || '123456',
+
   // Twilio (SMS OTP — admin portal and optional user OTP)
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',

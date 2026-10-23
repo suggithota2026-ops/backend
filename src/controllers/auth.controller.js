@@ -4,12 +4,44 @@ const ContactMessage = require('../models/contact.model');
 const { generateOTPWithExpiry, verifyOTP: verifyOTPService, sendOTP: sendOTPService } = require('../services/otp.service');
 const { sendSuccess, sendError } = require('../utils/response');
 const logger = require('../utils/logger');
-const { NODE_ENV, OTP_EXPIRY_MINUTES } = require('../config/env');
+const { NODE_ENV, OTP_EXPIRY_MINUTES, REVIEW_MOBILE_NUMBER, REVIEW_OTP } = require('../config/env');
 const {
   normalizeMobileNumber,
   userMobileWhere,
   contactNumberWhere,
 } = require('../utils/userMobile');
+
+const isReviewNumber = (mobileNumber) =>
+  !!REVIEW_MOBILE_NUMBER && mobileNumber === REVIEW_MOBILE_NUMBER;
+
+// Google Play reviewer login: ensure the test account exists and is approved,
+// store the fixed OTP and reply without sending an SMS.
+const sendReviewOTP = async (mobileNumber, reply, message) => {
+  let user = await User.findOne({ where: userMobileWhere(mobileNumber) });
+  if (!user) {
+    user = await User.create({
+      mobileNumber,
+      isVerified: true,
+      hotelName: 'Google Play Review',
+      address: 'Test account',
+    });
+  }
+  user.isVerified = true;
+  user.isBlocked = false;
+  user.otpCode = REVIEW_OTP;
+  user.otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+  await user.save();
+
+  reply.type('application/json');
+  return reply.status(200).send({
+    success: true,
+    message,
+    data: {
+      expiresAt: user.otpExpiresAt.toISOString(),
+      expiresInMinutes: OTP_EXPIRY_MINUTES,
+    },
+  });
+};
 
 // POST /api/auth/send-otp
 const sendOTP = async (request, reply) => {
@@ -17,6 +49,10 @@ const sendOTP = async (request, reply) => {
     const mobileNumber = normalizeMobileNumber(request.body.mobileNumber);
     if (mobileNumber.length !== 10) {
       return sendError(reply, 'Please enter a valid 10-digit mobile number', 400);
+    }
+
+    if (isReviewNumber(mobileNumber)) {
+      return sendReviewOTP(mobileNumber, reply, 'OTP sent successfully');
     }
 
     let user = await User.findOne({ where: userMobileWhere(mobileNumber) });
@@ -163,7 +199,9 @@ const verifyOTP = async (request, reply) => {
       );
     }
 
-    const isValid = verifyOTPService(user.otpCode, otp, user.otpExpiresAt);
+    const isValid = isReviewNumber(mobileNumber)
+      ? String(otp) === REVIEW_OTP
+      : verifyOTPService(user.otpCode, otp, user.otpExpiresAt);
     if (!isValid) {
       return sendError(reply, 'Invalid or expired OTP', 400);
     }
@@ -288,6 +326,10 @@ const resendOTP = async (request, reply) => {
     const mobileNumber = normalizeMobileNumber(request.body.mobileNumber);
     if (mobileNumber.length !== 10) {
       return sendError(reply, 'Please enter a valid 10-digit mobile number', 400);
+    }
+
+    if (isReviewNumber(mobileNumber)) {
+      return sendReviewOTP(mobileNumber, reply, 'OTP resent successfully');
     }
 
     const user = await User.findOne({ where: userMobileWhere(mobileNumber) });
